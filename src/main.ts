@@ -3,7 +3,7 @@ import Stats from 'stats.js'
 
 type GameState = 'start' | 'playing' | 'gameover'
 
-type BuffKey = 'freeze' | 'rapid' | 'invincible'
+type BuffKey = 'freeze' | 'rapid' | 'invincible' | 'barrage'
 
 type Buffs = Record<BuffKey, number>
 
@@ -88,6 +88,7 @@ const powerUpTypes: PowerUpDef[] = [
   { type: 'freeze', char: '冰', color: '#60a5fa', duration: 600 },
   { type: 'rapid', char: '连', color: '#fbbf24', duration: 600 },
   { type: 'invincible', char: '盾', color: '#a78bfa', duration: 900 },
+  { type: 'barrage', char: '环', color: '#fb7185', duration: 480 },
 ]
 
 let cw = 0
@@ -95,7 +96,7 @@ let ch = 0
 let gameState: GameState = 'start'
 let score = 0
 let frameCount = 0
-const buffs: Buffs = { freeze: 0, rapid: 0, invincible: 0 }
+const buffs: Buffs = { freeze: 0, rapid: 0, invincible: 0, barrage: 0 }
 const mouse: MouseState = { x: -1000, y: -1000, isDown: false }
 
 let textGrid: TextBlock[] = []
@@ -721,6 +722,38 @@ function createExplosion(x: number, y: number, color: string, count = 15): void 
   }
 }
 
+function firePlayerBullets(): void {
+  const bulletSpeed = 12
+  const isBarrageActive = buffs.barrage > frameCount
+
+  if (isBarrageActive) {
+    const bulletCount = 12
+    for (let i = 0; i < bulletCount; i++) {
+      const angle = (Math.PI * 2 * i) / bulletCount
+      bullets.push(new Bullet(
+        tank.x,
+        tank.y,
+        Math.cos(angle) * bulletSpeed,
+        Math.sin(angle) * bulletSpeed,
+        true,
+      ))
+    }
+    tank.x -= Math.cos(tank.angle) * 2
+    tank.y -= Math.sin(tank.angle) * 2
+    return
+  }
+
+  bullets.push(new Bullet(
+    tank.x,
+    tank.y,
+    Math.cos(tank.angle) * bulletSpeed,
+    Math.sin(tank.angle) * bulletSpeed,
+    true,
+  ))
+  tank.x -= Math.cos(tank.angle) * 3
+  tank.y -= Math.sin(tank.angle) * 3
+}
+
 function setScore(nextScore: number): void {
   score = nextScore
   dom.scoreDisplay.innerText = String(score)
@@ -731,6 +764,7 @@ function updateBuffDisplay(): void {
   if (buffs.freeze > frameCount) activeBuffs.push(`❄️冻结 ${((buffs.freeze - frameCount) / 60).toFixed(1)}s`)
   if (buffs.rapid > frameCount) activeBuffs.push(`🔥连发 ${((buffs.rapid - frameCount) / 60).toFixed(1)}s`)
   if (buffs.invincible > frameCount) activeBuffs.push(`🛡️无敌 ${((buffs.invincible - frameCount) / 60).toFixed(1)}s`)
+  if (buffs.barrage > frameCount) activeBuffs.push(`🌪️环射 ${((buffs.barrage - frameCount) / 60).toFixed(1)}s`)
   const nextText = activeBuffs.join(' | ')
   if (nextText !== lastBuffDisplayText) {
     dom.buffDisplay.innerText = nextText
@@ -760,6 +794,7 @@ function startGame(): void {
   buffs.freeze = 0
   buffs.rapid = 0
   buffs.invincible = 0
+  buffs.barrage = 0
 
   lastBuffDisplayText = ''
   dom.buffDisplay.innerText = ''
@@ -813,17 +848,8 @@ function update(): void {
 
   const currentFireRate = buffs.rapid > frameCount ? 3 : tank.fireRate
   if (mouse.isDown && frameCount - tank.lastShot >= currentFireRate) {
-    const bulletSpeed = 12
-    bullets.push(new Bullet(
-      tank.x,
-      tank.y,
-      Math.cos(tank.angle) * bulletSpeed,
-      Math.sin(tank.angle) * bulletSpeed,
-      true,
-    ))
+    firePlayerBullets()
     tank.lastShot = frameCount
-    tank.x -= Math.cos(tank.angle) * 3
-    tank.y -= Math.sin(tank.angle) * 3
   }
 
   if (frameCount % 600 === 0 && Math.random() < 0.8) {

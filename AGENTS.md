@@ -63,7 +63,7 @@ This document helps AI agents and developers quickly understand the current arch
 - `gameState`: `'start' | 'playing' | 'gameover'`
 - `frameCount`: 全局帧计数器
 - `score`: 当前得分
-- `buffs`: `{ freeze, rapid, invincible }`，存的是 buff 失效帧
+- `buffs`: `{ freeze, rapid, invincible, barrage }`，存的是 buff 失效帧
 - `mouse`: 鼠标/触摸输入状态
 - `textGrid`, `bullets`, `enemies`, `particles`, `powerUps`: 各类实体数组
 
@@ -130,11 +130,12 @@ Agent 注意:
 
 ### 6.5 PowerUp
 
-当前内置三种：
+当前内置四种：
 
 - `freeze`: 冻结敌人
 - `rapid`: 提升玩家射速
 - `invincible`: 玩家无敌并可触碰秒杀敌人
+- `barrage`: 玩家每次开火会向 360 度同时发射一圈子弹
 
 ## 7. 碰撞与性能策略 (Collision & Performance Notes)
 
