@@ -16,7 +16,16 @@ This document helps AI agents and developers quickly understand the current arch
 - 原生 CSS
 
 当前文件结构:
-- [src/main.ts](src/main.ts): 游戏主逻辑、状态管理、实体定义、布局与渲染
+- [src/main.ts](src/main.ts): 应用入口，仅负责启动游戏
+- [src/game/index.ts](src/game/index.ts): 游戏编排层，负责主循环、事件绑定、状态推进与生命周期控制
+- [src/game/state.ts](src/game/state.ts): 全局运行时状态容器
+- [src/game/entities.ts](src/game/entities.ts): `TextBlock` / `Bullet` / `Enemy` / `PowerUp` / `Particle` / `AmbientGlyph`
+- [src/game/layout.ts](src/game/layout.ts): `pretext` 文本布局、主通道与文字岛生成、文字空间分桶重建
+- [src/game/rendering.ts](src/game/rendering.ts): DOM 对象池与渲染同步
+- [src/game/dom.ts](src/game/dom.ts): 舞台 DOM 引用收集、UI 显隐与 `stats.js` 面板初始化
+- [src/game/constants.ts](src/game/constants.ts): 常量、语料和道具定义
+- [src/game/types.ts](src/game/types.ts): 共享类型
+- [src/game/utils.ts](src/game/utils.ts): 通用数学与碰撞工具
 - [index.html](index.html): 舞台 DOM 结构和样式
 - [package.json](package.json): 构建脚本与依赖
 
@@ -30,6 +39,13 @@ This document helps AI agents and developers quickly understand the current arch
 - `renderLoop()`: 由 `requestAnimationFrame(renderLoop)` 驱动，负责把当前状态同步到 DOM。
 - `stats.js` 包裹在 `renderLoop()` 外围，用于观测真实渲染帧率与每帧耗时。
 - `Esc` 可在 `playing` 与 `paused` 状态间切换；暂停时保留当前画面并冻结逻辑推进。
+
+当前模块分工：
+- `src/main.ts` 只做 bootstrap
+- `src/game/index.ts` 持有运行时编排权，负责调用 `resizeStage()`、`startGame()`、`update()`、`renderLoop()`
+- `src/game/layout.ts` 专注静态文字地形和空间分桶
+- `src/game/rendering.ts` 专注把状态同步到 DOM，并维护动态实体对象池
+- `src/game/entities.ts` 专注实体数据结构与局部更新逻辑
 
 核心时间轴:
 - `frameCount` 是全局唯一时间基准。
@@ -62,7 +78,7 @@ This document helps AI agents and developers quickly understand the current arch
 
 ## 4. 全局状态管理 (Global State Management)
 
-关键全局变量如下：
+关键全局状态现集中在 `src/game/state.ts`：
 
 - `gameState`: `'start' | 'playing' | 'paused' | 'gameover'`
 - `frameCount`: 全局帧计数器
@@ -71,12 +87,12 @@ This document helps AI agents and developers quickly understand the current arch
 - `mouse`: 鼠标/触摸输入状态
 - `textGrid`, `ambientGlyphs`, `bullets`, `enemies`, `particles`, `powerUps`: 各类实体数组
 
-性能相关缓存：
+性能相关缓存与运行时辅助结构：
 
-- `preparedCorpusCache`: 缓存 `pretext.prepareWithSegments()` 结果，避免重复准备相同长度的文本语料
-- `glyphWidthCache`: 缓存单个字形宽度，避免重复 `measureText`
-- `textBuckets`: 文字空间分桶，用于加速“子弹撞文字”检测
 - `lastBuffDisplayText`: buff UI 文案缓存，避免无意义 DOM 更新
+- `preparedCorpusCache`: 位于 `src/game/layout.ts`，缓存 `pretext.prepareWithSegments()` 结果，避免重复准备相同长度的文本语料
+- `glyphWidthCache`: 位于 `src/game/layout.ts`，缓存单个字形宽度，避免重复 `measureText`
+- `textBuckets`: 在编排层重建并传给子弹更新，用于加速“子弹撞文字”检测
 
 ## 5. 文本布局系统 (Text Layout with Pretext)
 
@@ -98,6 +114,7 @@ Agent 注意:
 - 如果修改字体、字距、语料密度、岛链尺寸、主通道宽度或安全区尺寸，请同步检查 `buildStageLayout()`
 - 如果新增排版模式，优先延续 `prepareWithSegments() + layoutNextLine()` 这条路径
 - 尽量复用 prepared/cached 数据，不要在高频路径里重新准备文本
+- 如果调整文字碰撞或空间索引，优先改 `rebuildTextBuckets()` 与相关布局模块，而不是把桶逻辑散回入口文件
 
 ## 6. 核心实体 (Core Entities)
 
@@ -168,7 +185,7 @@ Agent 注意:
 修改代码时请遵循以下原则：
 
 重置状态必须彻底:
-- 如果新增全局变量、缓存、计时器或坦克字段，必须在 `startGame()` 中正确重置
+- 如果新增 `state.ts` 中的全局变量、计时器或坦克字段，必须在 `startGame()` 中正确重置
 - 如果新增与布局相关的缓存，要考虑 `resizeStage()` 时是否需要重建
 
 时间控制必须基于帧:

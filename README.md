@@ -84,7 +84,16 @@ VS Code / Cursor:
 
 ## 项目结构
 
-- [src/main.ts](src/main.ts): 游戏主循环、实体、碰撞、文本布局、性能优化逻辑
+- [src/main.ts](src/main.ts): 应用入口，负责启动游戏
+- [src/game/index.ts](src/game/index.ts): 游戏编排层，负责主循环、事件绑定与整体状态推进
+- [src/game/state.ts](src/game/state.ts): 全局运行时状态
+- [src/game/entities.ts](src/game/entities.ts): 核心实体定义与局部更新逻辑
+- [src/game/layout.ts](src/game/layout.ts): `pretext` 文本布局、通道/岛链生成与文字分桶
+- [src/game/rendering.ts](src/game/rendering.ts): DOM 对象池与渲染同步
+- [src/game/dom.ts](src/game/dom.ts): DOM 引用收集、UI 显隐与调试面板初始化
+- [src/game/constants.ts](src/game/constants.ts): 常量、语料、道具配置
+- [src/game/types.ts](src/game/types.ts): 共享类型定义
+- [src/game/utils.ts](src/game/utils.ts): 碰撞与数学工具
 - [index.html](index.html): 舞台和 UI 的 DOM 结构与样式
 - [AGENTS.md](AGENTS.md): 面向 AI agent 和开发者的项目约束与架构说明
 
@@ -108,6 +117,8 @@ VS Code / Cursor:
 - `stats.js` 挂在 `renderLoop()` 外围，显示实时 FPS 和渲染耗时
 - 全部持续时间逻辑都依赖 `frameCount`
 - `Esc` 会把游戏切到暂停态，此时逻辑推进和 `frameCount` 都会冻结，但当前画面会继续渲染并显示暂停蒙层
+
+为了降低入口复杂度，当前代码已经按职责拆分为“编排层 / 状态层 / 实体层 / 布局层 / 渲染层 / DOM 层 / 工具层”。这让继续扩展敌人、布局算法或渲染优化时，不需要再在一个超长 `main.ts` 里来回穿梭。
 
 ### 当前实体
 
@@ -161,6 +172,8 @@ VS Code / Cursor:
 
 ## 开发说明
 
-- 游戏状态重置入口在 `startGame()`
-- 窗口变化时会走 `resizeStage()` 重新生成文字布局
+- 游戏状态重置入口在 [src/game/index.ts](src/game/index.ts) 的 `startGame()`
+- 窗口变化时会走 [src/game/index.ts](src/game/index.ts) 的 `resizeStage()` 重新生成文字布局
+- 文本地形和空间分桶逻辑集中在 [src/game/layout.ts](src/game/layout.ts)
+- 动态实体 DOM 池与渲染同步集中在 [src/game/rendering.ts](src/game/rendering.ts)
 - 如果你修改了主循环、渲染模型或性能策略，请同步更新 [AGENTS.md](AGENTS.md)
