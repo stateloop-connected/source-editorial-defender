@@ -1,12 +1,18 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript"],
+  "plugins": ["oxc", "typescript", "unicorn"],
+  "env": {
+    "browser": true
+  },
+  "options": {
+    "typeAware": true
+  },
   "ignorePatterns": [
     "AGENTS.md",
     "README.md",
     ".vscode/**",
     "public/**",
     "dist/**",
-    "node_modules/**",
+    "node_modules/**"
   ]
 }

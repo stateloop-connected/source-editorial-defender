@@ -1,13 +1,23 @@
 {
-  // Master toggle to enable Oxc features
   "oxc.enable": true,
-  // Run linting on save
-  "oxc.lint.run": "onSave", 
+  "oxc.lint.run": "onSave",
   "editor.codeActionsOnSave": {
-    "source.fixAll.oxc": "always", // Run lint fixes after formatter
-    "source.format.oxc": "always" // Run formatter first
+    "source.fixAll.oxc": "always"
   },
-  "editor.defaultFormatter": "oxc.oxc-vscode",
-  // Required for type-aware linting to function correctly
-  "oxc.typeAware": true
+  "[javascript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true
+  }
 }

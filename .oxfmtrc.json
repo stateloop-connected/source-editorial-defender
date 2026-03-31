@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "semi": true,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "trailingComma": "all",
+  "ignorePatterns": [
+    "AGENTS.md",
+    "README.md",
+    "CLAUDE.md",
+    ".agents/**",
+    ".claude/**",
+    ".husky/**",
+    ".trae/**",
+    ".vscode/**",
+    "docs/**",
+    "public/**",
+    "dist/**",
+    "node_modules/**",
+    "src-tauri/target/**"
+  ]
+}

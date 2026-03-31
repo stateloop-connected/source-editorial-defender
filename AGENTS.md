@@ -10,6 +10,7 @@ This document helps AI agents and developers quickly understand the current arch
 - Vite
 - TypeScript
 - DOM 分层渲染
+- `oxlint` + `oxlint-tsgolint`（用于 CLI 与 VS Code 的 type-aware linting）
 - `@chenglou/pretext` 用于高性能文本排版测量
 - `stats.js` 用于开发期 FPS / 帧耗时监视
 - 原生 CSS

@@ -1,42 +1,44 @@
 {
   "name": "editorial-defender",
-  "private": true,
   "version": "1.0.0",
+  "private": true,
   "description": "A typography-inspired survival shooter where a tank battles through a living wall of dynamically reflowing text.",
-  "type": "module",
+  "keywords": [
+    "bullet-hell",
+    "dom-rendering",
+    "game",
+    "pretext",
+    "survival-shooter",
+    "tank-game",
+    "text-layout",
+    "typescript",
+    "typography",
+    "vite"
+  ],
+  "license": "MIT",
   "author": "Steve245270533",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
-    "lint": "oxlint --fix -c .oxlintrc.json"
-  },
-  "keywords": [
-    "game",
-    "tank-game",
-    "survival-shooter",
-    "bullet-hell",
-    "typography",
-    "text-layout",
-    "dom-rendering",
-    "pretext",
-    "typescript",
-    "vite"
-  ],
-  "license": "MIT",
-  "engines": {
-    "node": "^20.19.0 || >=22.12.0",
-    "pnpm": ">=10"
-  },
-  "packageManager": "pnpm@10.28.2",
-  "devDependencies": {
-    "oxlint": "^1.57.0",
-    "typescript": "^6.0.2",
-    "vite": "^8.0.3"
+    "lint": "oxlint --fix -c .oxlintrc.json && oxfmt"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.3",
     "stats.js": "^0.17.0"
-  }
+  },
+  "devDependencies": {
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
+    "oxlint-tsgolint": "^0.18.1",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.28.2"
 }

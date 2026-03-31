@@ -48,6 +48,7 @@
 
 - Vite
 - TypeScript
+- `oxlint` + `oxlint-tsgolint`
 - `@chenglou/pretext`
 - `stats.js`
 - 原生 CSS
@@ -64,6 +65,18 @@ pnpm dev
 ```bash
 pnpm build
 ```
+
+代码检查与自动修复：
+
+```bash
+pnpm lint
+```
+
+VS Code / Cursor:
+
+- 安装工作区推荐扩展 `oxc.oxc-vscode`
+- 保存时会执行 `Oxc` 格式化和 `Oxlint` 自动修复
+- `type-aware` linting 由项目级 Oxlint 配置统一开启
 
 ## 项目结构
 
