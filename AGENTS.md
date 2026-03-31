@@ -16,9 +16,9 @@ This document helps AI agents and developers quickly understand the current arch
 - 原生 CSS
 
 当前文件结构:
-- [src/main.ts](/Users/lehuaixiaochen/Downloads/Project/tank-game/src/main.ts): 游戏主逻辑、状态管理、实体定义、布局与渲染
-- [index.html](/Users/lehuaixiaochen/Downloads/Project/tank-game/index.html): 舞台 DOM 结构和样式
-- [package.json](/Users/lehuaixiaochen/Downloads/Project/tank-game/package.json): 构建脚本与依赖
+- [src/main.ts](src/main.ts): 游戏主逻辑、状态管理、实体定义、布局与渲染
+- [index.html](index.html): 舞台 DOM 结构和样式
+- [package.json](package.json): 构建脚本与依赖
 
 注意: 项目已经不是旧版的“单文件 + Canvas 2D”架构，当前实现以绝对定位 DOM 节点作为主要渲染手段。
 
@@ -29,6 +29,7 @@ This document helps AI agents and developers quickly understand the current arch
 - `update()`: 由 `setInterval(update, 1000 / 60)` 驱动，固定 60 FPS，负责移动、碰撞、刷怪、buff、生命周期处理等逻辑。
 - `renderLoop()`: 由 `requestAnimationFrame(renderLoop)` 驱动，负责把当前状态同步到 DOM。
 - `stats.js` 包裹在 `renderLoop()` 外围，用于观测真实渲染帧率与每帧耗时。
+- `Esc` 可在 `playing` 与 `paused` 状态间切换；暂停时保留当前画面并冻结逻辑推进。
 
 核心时间轴:
 - `frameCount` 是全局唯一时间基准。
@@ -49,7 +50,7 @@ This document helps AI agents and developers quickly understand the current arch
 - `bulletLayer`: 子弹
 - `particleLayer`: 粒子
 - `tankLayer`: 玩家坦克
-- `uiContainer` / `hud` / `gameOverUI`: UI 层
+- `uiContainer` / `hud` / `pauseUI` / `gameOverUI`: UI 层
 - `stats.js` 调试面板: 固定在右下角，独立于 HUD
 
 渲染特点:
@@ -61,7 +62,7 @@ This document helps AI agents and developers quickly understand the current arch
 
 关键全局变量如下：
 
-- `gameState`: `'start' | 'playing' | 'gameover'`
+- `gameState`: `'start' | 'playing' | 'paused' | 'gameover'`
 - `frameCount`: 全局帧计数器
 - `score`: 当前得分
 - `buffs`: `{ freeze, rapid, invincible, barrage }`，存的是 buff 失效帧
@@ -178,6 +179,7 @@ Agent 注意:
 
 UI 交互:
 - 像分数、buff 文案、结算面板这种 DOM 文本更新，应放在状态变更点，避免每帧刷新
+- 暂停提示这类覆盖层应复用现有 UI layer，通过状态切换显示/隐藏，不要靠高频轮询改文案
 - 调试型 UI（如 `stats.js`）应尽量复用第三方面板自身更新逻辑，不要再额外套一层高频 DOM 文本刷新
 
 文档同步:

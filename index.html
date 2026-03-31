@@ -231,6 +231,11 @@
         backdrop-filter: blur(12px);
       }
 
+      .screen-pause {
+        background: rgba(15, 23, 42, 0.74);
+        backdrop-filter: blur(10px);
+      }
+
       .screen-title {
         margin: 0 0 16px;
         font-size: clamp(3.5rem, 8vw, 4.5rem);
@@ -264,6 +269,10 @@
       .screen-subtitle {
         margin: 0 0 32px;
         font-size: 1.5rem;
+      }
+
+      .screen-subtitle-cyan {
+        color: #67e8f9;
       }
 
       .screen-subtitle-danger {
@@ -350,7 +359,7 @@
       .hud-help {
         color: #94a3b8;
         font-size: 0.875rem;
-        line-height: 1.6;
+        line-height: 10px;
         text-align: right;
       }
 
@@ -444,7 +453,22 @@
       <div class="hud-help">
         <p>鼠标: 移动与瞄准</p>
         <p>左键: 射击并破坏文字</p>
+        <p>Esc: 暂停 / 恢复</p>
       </div>
+    </div>
+
+    <div
+      id="pauseUI"
+      class="ui-layer screen screen-pause is-transparent is-hidden"
+    >
+      <h2 class="screen-title neon-text">已暂停</h2>
+      <p class="screen-subtitle screen-subtitle-cyan">
+        排版引擎冻结中，按 Esc 返回战场
+      </p>
+      <p class="screen-copy">
+        当前画面与帧计时已锁定。<br />
+        文字、敌人、子弹与增益剩余时间都会保持原样。
+      </p>
     </div>
 
     <div

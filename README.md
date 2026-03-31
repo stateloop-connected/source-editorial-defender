@@ -27,6 +27,7 @@
 
 - 鼠标移动: 控制坦克朝目标位置平滑移动
 - 鼠标左键按住: 持续开火
+- `Esc`: 暂停 / 恢复当前战局
 - 触摸开始 / 拖动: 在移动端控制坦克并持续攻击
 - 目标: 尽可能长时间生存并提高分数
 
@@ -80,9 +81,9 @@ VS Code / Cursor:
 
 ## 项目结构
 
-- [src/main.ts](/Users/lehuaixiaochen/Downloads/Project/tank-game/src/main.ts): 游戏主循环、实体、碰撞、文本布局、性能优化逻辑
-- [index.html](/Users/lehuaixiaochen/Downloads/Project/tank-game/index.html): 舞台和 UI 的 DOM 结构与样式
-- [AGENTS.md](/Users/lehuaixiaochen/Downloads/Project/tank-game/AGENTS.md): 面向 AI agent 和开发者的项目约束与架构说明
+- [src/main.ts](src/main.ts): 游戏主循环、实体、碰撞、文本布局、性能优化逻辑
+- [index.html](index.html): 舞台和 UI 的 DOM 结构与样式
+- [AGENTS.md](AGENTS.md): 面向 AI agent 和开发者的项目约束与架构说明
 
 ## 核心机制
 
@@ -102,6 +103,7 @@ VS Code / Cursor:
 - `renderLoop()` 使用 `requestAnimationFrame()`，负责把状态同步到 DOM
 - `stats.js` 挂在 `renderLoop()` 外围，显示实时 FPS 和渲染耗时
 - 全部持续时间逻辑都依赖 `frameCount`
+- `Esc` 会把游戏切到暂停态，此时逻辑推进和 `frameCount` 都会冻结，但当前画面会继续渲染并显示暂停蒙层
 
 ### 当前实体
 
@@ -156,4 +158,4 @@ VS Code / Cursor:
 
 - 游戏状态重置入口在 `startGame()`
 - 窗口变化时会走 `resizeStage()` 重新生成文字布局
-- 如果你修改了主循环、渲染模型或性能策略，请同步更新 [AGENTS.md](/Users/lehuaixiaochen/Downloads/Project/tank-game/AGENTS.md)
+- 如果你修改了主循环、渲染模型或性能策略，请同步更新 [AGENTS.md](AGENTS.md)

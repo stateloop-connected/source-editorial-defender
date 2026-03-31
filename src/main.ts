@@ -7,7 +7,7 @@ import {
 } from "@chenglou/pretext";
 import Stats from "stats.js";
 
-type GameState = "start" | "playing" | "gameover";
+type GameState = "start" | "playing" | "paused" | "gameover";
 
 type BuffKey = "freeze" | "rapid" | "invincible" | "barrage";
 
@@ -61,6 +61,7 @@ type StageDomRefs = {
   tankShield: HTMLDivElement;
   uiContainer: HTMLDivElement;
   hud: HTMLDivElement;
+  pauseUI: HTMLDivElement;
   gameOverUI: HTMLDivElement;
   scoreDisplay: HTMLSpanElement;
   finalScoreDisplay: HTMLSpanElement;
@@ -465,6 +466,7 @@ function buildStageDom(): StageDomRefs {
   const tankLayer = getRequiredElement("tankLayer", HTMLDivElement);
   const uiContainer = getRequiredElement("uiContainer", HTMLDivElement);
   const hud = getRequiredElement("hud", HTMLDivElement);
+  const pauseUI = getRequiredElement("pauseUI", HTMLDivElement);
   const gameOverUI = getRequiredElement("gameOverUI", HTMLDivElement);
   const scoreDisplay = getRequiredElement("scoreDisplay", HTMLSpanElement);
   const finalScoreDisplay = getRequiredElement("finalScore", HTMLSpanElement);
@@ -500,6 +502,7 @@ function buildStageDom(): StageDomRefs {
     tankShield,
     uiContainer,
     hud,
+    pauseUI,
     gameOverUI,
     scoreDisplay,
     finalScoreDisplay,
@@ -847,6 +850,27 @@ function setScore(nextScore: number): void {
   dom.scoreDisplay.innerText = String(score);
 }
 
+function pauseGame(): void {
+  if (gameState !== "playing") return;
+  gameState = "paused";
+  mouse.isDown = false;
+  showElement(dom.pauseUI);
+}
+
+function resumeGame(): void {
+  if (gameState !== "paused") return;
+  hideElement(dom.pauseUI);
+  gameState = "playing";
+}
+
+function togglePause(): void {
+  if (gameState === "playing") {
+    pauseGame();
+  } else if (gameState === "paused") {
+    resumeGame();
+  }
+}
+
 function updateBuffDisplay(): void {
   const activeBuffs: string[] = [];
   if (buffs.freeze > frameCount)
@@ -897,6 +921,7 @@ function startGame(): void {
   lastBuffDisplayText = "";
   dom.buffDisplay.innerText = "";
   hideElement(dom.uiContainer);
+  hideElement(dom.pauseUI);
   hideElement(dom.gameOverUI);
   fadeInElement(dom.hud);
 
@@ -922,6 +947,7 @@ function gameOver(): void {
 
 function update(): void {
   if (gameState !== "playing") {
+    if (gameState === "paused") return;
     for (let i = particles.length - 1; i >= 0; i--) {
       const particle = particles[i];
       if (particle === undefined) continue;
@@ -1176,7 +1202,7 @@ function renderDynamicEntities(): void {
     element.style.boxShadow = `0 0 10px ${particle.color}`;
   }
 
-  if (gameState === "playing") {
+  if (gameState === "playing" || gameState === "paused") {
     dom.tank.style.display = "";
     dom.tank.style.left = `${tank.x}px`;
     dom.tank.style.top = `${tank.y}px`;
@@ -1202,7 +1228,7 @@ function renderLoop(): void {
 window.addEventListener("resize", resizeStage);
 
 window.addEventListener("mousemove", (event) => {
-  if (gameState !== "start") {
+  if (gameState === "playing" || gameState === "paused") {
     mouse.x = event.clientX;
     mouse.y = event.clientY;
   }
@@ -1242,6 +1268,13 @@ window.addEventListener(
 
 window.addEventListener("touchend", () => {
   mouse.isDown = false;
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.repeat) return;
+  if (gameState !== "playing" && gameState !== "paused") return;
+  event.preventDefault();
+  togglePause();
 });
 
 dom.startBtn.addEventListener("click", startGame);
