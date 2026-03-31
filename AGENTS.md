@@ -1,17 +1,17 @@
-# 排版防线 (Editorial Defender) - Agent Guide
+# Agent 编程防线 (Editorial Defender) - Agent Guide
 
 This document helps AI agents and developers quickly understand the current architecture, runtime model, and extension constraints of the "Editorial Defender" project.
 
 ## 1. 项目概述 (Project Overview)
 
-概念: 一款受网页排版引擎启发的生存射击游戏。背景文字会围绕玩家产生“避让”效果，玩家驾驶坦克在随机文字岛链和曲折主通道构成的动态障碍场中生存并反击敌对节点。
+概念: 一款以新时代 Agent 编程势力对抗守旧古法编程势力为主题的生存射击游戏。背景文字会围绕玩家产生“避让”效果，玩家驾驶代理核心在随机文字岛链和曲折主通道构成的动态障碍场中生存并反击敌军。
 
 当前技术栈:
 - Vite
 - TypeScript
 - DOM 分层渲染
 - `oxlint` + `oxlint-tsgolint`（用于 CLI 与 VS Code 的 type-aware linting）
-- `@chenglou/pretext` 用于高性能文本排版测量
+- `@chenglou/pretext` 用于高性能关键词排版测量
 - `stats.js` 用于开发期 FPS / 帧耗时监视
 - 原生 CSS
 
@@ -20,7 +20,7 @@ This document helps AI agents and developers quickly understand the current arch
 - [src/game/index.ts](src/game/index.ts): 游戏编排层，负责主循环、事件绑定、状态推进与生命周期控制
 - [src/game/state.ts](src/game/state.ts): 全局运行时状态容器
 - [src/game/entities.ts](src/game/entities.ts): `TextBlock` / `Bullet` / `Enemy` / `PowerUp` / `Particle` / `AmbientGlyph`
-- [src/game/layout.ts](src/game/layout.ts): `pretext` 文本布局、主通道与文字岛生成、文字空间分桶重建
+- [src/game/layout.ts](src/game/layout.ts): `pretext` 关键词布局、主通道与文字岛生成、文字空间分桶重建
 - [src/game/rendering.ts](src/game/rendering.ts): DOM 对象池与渲染同步
 - [src/game/dom.ts](src/game/dom.ts): 舞台 DOM 引用收集、UI 显隐与 `stats.js` 面板初始化
 - [src/game/constants.ts](src/game/constants.ts): 常量、语料和道具定义
@@ -90,29 +90,30 @@ This document helps AI agents and developers quickly understand the current arch
 性能相关缓存与运行时辅助结构：
 
 - `lastBuffDisplayText`: buff UI 文案缓存，避免无意义 DOM 更新
-- `preparedCorpusCache`: 位于 `src/game/layout.ts`，缓存 `pretext.prepareWithSegments()` 结果，避免重复准备相同长度的文本语料
 - `glyphWidthCache`: 位于 `src/game/layout.ts`，缓存单个字形宽度，避免重复 `measureText`
 - `textBuckets`: 在编排层重建并传给子弹更新，用于加速“子弹撞文字”检测
 
 ## 5. 文本布局系统 (Text Layout with Pretext)
 
-文字背景布局由 `pretext` 驱动：
+文字背景布局由 `pretext` 驱动，但以“关键词 token”为基本排版单位：
 
-- 使用 `prepareWithSegments()` 预处理语料
-- 使用 `layoutNextLine()` 按行推进
-- 通过 `cursor` 实现逐岛区逐行布局
+- 使用 `prepareWithSegments()` 预处理单个关键词
+- 每个关键词先用 `pretext` 计算宽度，再按整词装入文字岛
+- 一个关键词内部仍会拆成多个 `TextBlock`，以保留坦克斥力和子弹击碎的局部交互
 - 先生成曲折主通道与中央战斗室，再在非通道区域放置随机簇状文字岛矩形
+- 文字岛的尺寸、内边距、密度与保底补位会按分辨率自适应调整，避免低分辨率下岛链几乎消失
 
 这套机制的意义：
 
 - 适合做“随机岛链 + 主通道”的排版地形
 - 可以在窗口变化时重建文字墙
+- 保证关键词不会被拆成半词换行
 - 可对文字总量设置预算，避免高分辨率下 DOM 节点数线性失控
 - 避免依赖 DOM reflow 做文本测量
 
 Agent 注意:
 - 如果修改字体、字距、语料密度、岛链尺寸、主通道宽度或安全区尺寸，请同步检查 `buildStageLayout()`
-- 如果新增排版模式，优先延续 `prepareWithSegments() + layoutNextLine()` 这条路径
+- 如果新增排版模式，优先延续 `prepareWithSegments()` 这条路径，并保持关键词整词布局
 - 尽量复用 prepared/cached 数据，不要在高频路径里重新准备文本
 - 如果调整文字碰撞或空间索引，优先改 `rebuildTextBuckets()` 与相关布局模块，而不是把桶逻辑散回入口文件
 

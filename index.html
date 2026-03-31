@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>排版防线 - Editorial Defender</title>
+    <title>Agent 编程防线 - Editorial Defender</title>
     <style>
       :root {
         --stage-bg: #0f172a;
@@ -444,33 +444,33 @@
     </div>
 
     <div id="uiContainer" class="ui-layer screen screen-start">
-      <h1 class="screen-title neon-text">排版防线</h1>
+      <h1 class="screen-title neon-text">Agent 编程防线</h1>
       <p class="screen-copy">
-        核心排版引擎已失控。<br />
-        使用鼠标操控坦克，左键发射<span class="screen-copy-accent-cyan"
-          >文字弹</span
+        新时代 Agent 编程势力已接管代码战区。<br />
+        使用鼠标调度代理核心，左键发射<span class="screen-copy-accent-cyan"
+          >关键词弹</span
         >。<br />
-        文字墙体可阻挡子弹，碰撞文字会产生<span
+        文字岛会阻挡双方火力，靠近时会产生<span
           class="screen-copy-accent-indigo"
-          >避让效果</span
+          >协作避让</span
         >。<br />
-        消灭不断涌来的错误节点，生存下去！
+        击退从边界涌来的古法编程势力，守住自动化时代！
       </p>
       <button id="startBtn" class="interactive game-button game-button-cyan">
-        初始化引擎 (开始游戏)
+        接入 Agent 网络 (开始游戏)
       </button>
     </div>
 
     <div id="hud" class="hud is-transparent">
       <div>
         <div class="hud-score neon-text">
-          Score: <span id="scoreDisplay">0</span>
+          战果: <span id="scoreDisplay">0</span>
         </div>
         <div id="buffDisplay" class="hud-buff"></div>
       </div>
       <div class="hud-help">
         <p>鼠标: 移动与瞄准</p>
-        <p>左键: 射击并破坏文字</p>
+        <p>左键: 发射关键词弹并击碎文字岛</p>
         <p>Esc: 暂停 / 恢复</p>
       </div>
     </div>
@@ -481,11 +481,11 @@
     >
       <h2 class="screen-title neon-text">已暂停</h2>
       <p class="screen-subtitle screen-subtitle-cyan">
-        排版引擎冻结中，按 Esc 返回战场
+        协作上下文冻结中，按 Esc 返回战场
       </p>
       <p class="screen-copy">
         当前画面与帧计时已锁定。<br />
-        文字、敌人、子弹与增益剩余时间都会保持原样。
+        文字岛、古法势力、关键词弹与增益剩余时间都会保持原样。
       </p>
     </div>
 
@@ -493,16 +493,18 @@
       id="gameOverUI"
       class="ui-layer screen screen-gameover is-transparent is-hidden"
     >
-      <h2 class="screen-title neon-text-red">系统崩溃</h2>
-      <p class="screen-subtitle screen-subtitle-danger">排版节点已被感染</p>
+      <h2 class="screen-title neon-text-red">协作链路中断</h2>
+      <p class="screen-subtitle screen-subtitle-danger">
+        代理核心已被古法编程势力压制
+      </p>
       <p class="screen-score">
-        最终得分: <span id="finalScore" class="screen-score-value">0</span>
+        最终战果: <span id="finalScore" class="screen-score-value">0</span>
       </p>
       <button
         id="restartBtn"
         class="interactive game-button game-button-danger"
       >
-        重启引擎 (再来一次)
+        重连协作链 (再来一次)
       </button>
     </div>
 

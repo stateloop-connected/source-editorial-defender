@@ -1,10 +1,4 @@
-import {
-  layoutNextLine,
-  prepareWithSegments,
-  type LayoutCursor,
-  type LayoutLine,
-  type PreparedTextWithSegments,
-} from "@chenglou/pretext";
+import { prepareWithSegments } from "@chenglou/pretext";
 
 import {
   AMBIENT_GLYPH_CHARS,
@@ -14,7 +8,7 @@ import {
   SAFE_ZONE_HEIGHT,
   SAFE_ZONE_WIDTH,
   TEXT_CHAR_GAP,
-  TEXT_CORPUS,
+  TEXT_CORPUS_WORDS,
   TEXT_FONT,
   TEXT_HORIZONTAL_PADDING,
   TEXT_ISLAND_INSET_X,
@@ -33,23 +27,20 @@ export type StageLayout = {
   ambientGlyphs: AmbientGlyph[];
 };
 
-const preparedCorpusCache = new Map<number, PreparedTextWithSegments>();
-const glyphWidthCache = new Map<string, number>();
-
 let currentWidth = 0;
 let currentHeight = 0;
+
+type CorpusToken = {
+  text: string;
+  graphemes: string[];
+  graphemeWidths: number[];
+  width: number;
+};
 
 const graphemeSegmenter =
   typeof Intl !== "undefined" && "Segmenter" in Intl
     ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
     : null;
-
-const measureContextRaw = document.createElement("canvas").getContext("2d");
-if (measureContextRaw === null) {
-  throw new Error("Unable to create a measurement context for Pretext layout.");
-}
-const measureContext = measureContextRaw;
-measureContext.font = TEXT_FONT;
 
 function splitGraphemes(text: string): string[] {
   if (graphemeSegmenter === null) return Array.from(text);
@@ -59,30 +50,110 @@ function splitGraphemes(text: string): string[] {
   );
 }
 
-function measureTextWidth(text: string, font: string): number {
-  const cacheKey = `${font}\u0000${text}`;
-  const cached = glyphWidthCache.get(cacheKey);
-  if (cached !== undefined) return cached;
-  if (measureContext.font !== font) {
-    measureContext.font = font;
+function buildUnitsFromPrepared(
+  prepared: ReturnType<typeof prepareWithSegments>,
+): Array<{ text: string; width: number }> {
+  const units: Array<{ text: string; width: number }> = [];
+
+  for (
+    let segmentIndex = 0;
+    segmentIndex < prepared.segments.length;
+    segmentIndex++
+  ) {
+    const segmentText = prepared.segments[segmentIndex];
+    const segmentWidth = prepared.widths[segmentIndex];
+    if (
+      segmentText === undefined ||
+      segmentWidth === undefined ||
+      segmentText.trim().length === 0
+    ) {
+      continue;
+    }
+
+    const breakableWidths = prepared.breakableWidths[segmentIndex];
+    const graphemes = splitGraphemes(segmentText);
+    if (
+      breakableWidths !== null &&
+      breakableWidths !== undefined &&
+      breakableWidths.length === graphemes.length
+    ) {
+      for (
+        let graphemeIndex = 0;
+        graphemeIndex < graphemes.length;
+        graphemeIndex++
+      ) {
+        const grapheme = graphemes[graphemeIndex];
+        const graphemeWidth = breakableWidths[graphemeIndex];
+        if (grapheme === undefined || graphemeWidth === undefined) continue;
+        units.push({ text: grapheme, width: graphemeWidth });
+      }
+      continue;
+    }
+
+    if (graphemes.length <= 1) {
+      units.push({ text: segmentText, width: segmentWidth });
+      continue;
+    }
+
+    const nestedPrepared = prepareWithSegments(segmentText, TEXT_FONT);
+    if (
+      nestedPrepared.segments.length === 1 &&
+      nestedPrepared.segments[0] === segmentText
+    ) {
+      units.push({ text: segmentText, width: segmentWidth });
+      continue;
+    }
+
+    units.push(...buildUnitsFromPrepared(nestedPrepared));
   }
-  const width = measureContext.measureText(text).width;
-  glyphWidthCache.set(cacheKey, width);
-  return width;
+
+  return units;
 }
 
-function repeatCorpus(minLength: number): string {
-  const repeatCount = Math.max(1, Math.ceil(minLength / TEXT_CORPUS.length));
-  return TEXT_CORPUS.repeat(repeatCount);
+const preparedSpace = prepareWithSegments(" ", TEXT_FONT);
+const corpusWordGap = Math.max(10, (preparedSpace.widths[0] ?? 0) * 2.5);
+
+function buildCorpusToken(text: string): CorpusToken {
+  const prepared = prepareWithSegments(text, TEXT_FONT);
+  const units = buildUnitsFromPrepared(prepared);
+  const graphemes = units.map((unit) => unit.text);
+  const graphemeWidths = units.map((unit) => unit.width);
+
+  const width = graphemeWidths.reduce(
+    (sum, graphemeWidth) => sum + graphemeWidth,
+    0,
+  );
+  return { text, graphemes, graphemeWidths, width };
 }
 
-function getPreparedCorpus(minLength: number): PreparedTextWithSegments {
-  const repeatCount = Math.max(1, Math.ceil(minLength / TEXT_CORPUS.length));
-  const cached = preparedCorpusCache.get(repeatCount);
-  if (cached !== undefined) return cached;
-  const prepared = prepareWithSegments(repeatCorpus(minLength), TEXT_FONT);
-  preparedCorpusCache.set(repeatCount, prepared);
-  return prepared;
+const corpusTokens = TEXT_CORPUS_WORDS.map((word) => buildCorpusToken(word));
+const maxCorpusTokenWidth = corpusTokens.reduce(
+  (maxWidth, token) => Math.max(maxWidth, token.width),
+  0,
+);
+
+function getViewportFitScale(): number {
+  return clamp(Math.min(currentWidth / 1280, currentHeight / 800), 0.78, 1.12);
+}
+
+function getSafeZoneScale(): number {
+  return clamp(Math.min(currentWidth / 1100, currentHeight / 760), 0.82, 1);
+}
+
+function getIslandInsetX(): number {
+  return clamp(TEXT_ISLAND_INSET_X * getViewportFitScale(), 14, TEXT_ISLAND_INSET_X);
+}
+
+function getIslandInsetY(): number {
+  return clamp(TEXT_ISLAND_INSET_Y * getViewportFitScale(), 10, TEXT_ISLAND_INSET_Y);
+}
+
+function getIslandLineHeight(): number {
+  return clamp(TEXT_LINE_HEIGHT * (0.9 + getViewportFitScale() * 0.1), 26, TEXT_LINE_HEIGHT);
+}
+
+function getIslandWordGap(): number {
+  return clamp(corpusWordGap * (0.88 + getViewportFitScale() * 0.12), 10, corpusWordGap);
 }
 
 export function rebuildTextBuckets(
@@ -199,10 +270,11 @@ function buildCorridorRects(safeRect: SafeRect): LayoutRect[] {
   const stageScale = Math.sqrt(
     (currentWidth * currentHeight) / BASE_STAGE_AREA,
   );
-  const corridorWidth = clamp(182 * stageScale, 170, 280);
-  const connectorHeight = clamp(106 * stageScale, 92, 156);
-  const chamberMarginX = clamp(54 * stageScale, 44, 88);
-  const chamberMarginY = clamp(38 * stageScale, 30, 64);
+  const viewportScale = getViewportFitScale();
+  const corridorWidth = clamp(182 * viewportScale, 132, 280);
+  const connectorHeight = clamp(106 * viewportScale, 74, 156);
+  const chamberMarginX = clamp(54 * viewportScale, 28, 88);
+  const chamberMarginY = clamp(38 * viewportScale, 22, 64);
   const chamber: LayoutRect = {
     x: safeRect.x - chamberMarginX,
     y: safeRect.y - chamberMarginY,
@@ -304,8 +376,8 @@ function buildCorridorRects(safeRect: SafeRect): LayoutRect[] {
     connectorHeight,
   );
 
-  const bayLength = clamp(205 * stageScale, 170, 320);
-  const bayHeight = clamp(92 * stageScale, 80, 132);
+  const bayLength = clamp(205 * viewportScale, 138, 320);
+  const bayHeight = clamp(92 * viewportScale, 68, 132);
   const bayY = clamp(
     rectCenterY(chamber) +
       (hashNoise(currentWidth, currentHeight, 37) - 0.5) * chamber.h * 0.42,
@@ -323,8 +395,8 @@ function buildCorridorRects(safeRect: SafeRect): LayoutRect[] {
     h: bayHeight,
   });
 
-  const spurLength = clamp(150 * stageScale, 124, 230);
-  const spurHeight = clamp(76 * stageScale, 68, 112);
+  const spurLength = clamp(150 * viewportScale, 108, 230);
+  const spurHeight = clamp(76 * viewportScale, 58, 112);
   const spurAnchorY = clamp(
     chamber.y - clamp(70 * stageScale, 56, 96),
     TEXT_VERTICAL_PADDING + spurHeight / 2,
@@ -347,11 +419,17 @@ function buildIslandCluster(
   anchorX: number,
   anchorY: number,
   seed: number,
-  stageScale: number,
+  viewportScale: number,
 ): LayoutRect[] {
   const shapeNoise = hashNoise(seed, 1);
-  let width = clamp((178 + hashNoise(seed, 3) * 144) * stageScale, 138, 340);
-  let height = clamp((108 + hashNoise(seed, 5) * 116) * stageScale, 92, 250);
+  const islandInsetX = getIslandInsetX();
+  const minWidth = Math.min(
+    currentWidth - TEXT_HORIZONTAL_PADDING * 2,
+    maxCorpusTokenWidth + islandInsetX * 2 + 18,
+  );
+  const minHeight = clamp(96 * viewportScale, 80, 140);
+  let width = clamp((178 + hashNoise(seed, 3) * 144) * viewportScale, minWidth, 340);
+  let height = clamp((108 + hashNoise(seed, 5) * 116) * viewportScale, minHeight, 250);
 
   if (shapeNoise < 0.33) {
     width *= 1.34;
@@ -374,7 +452,7 @@ function buildIslandCluster(
   for (let index = 0; index < attachmentCount; index++) {
     const side = Math.floor(hashNoise(seed, 13 + index * 17) * 4);
     const along = (hashNoise(seed, 17 + index * 17) - 0.5) * 0.42;
-    const overlap = clamp(18 * stageScale, 12, 26);
+    const overlap = clamp(18 * viewportScale, 10, 26);
     const wideAttachment = hashNoise(seed, 19 + index * 17) > 0.52;
     let rect: LayoutRect;
 
@@ -419,15 +497,23 @@ function canPlaceIslandCluster(
   placedRects: LayoutRect[],
   minGap: number,
 ): boolean {
+  const islandInsetX = getIslandInsetX();
+  const lineHeight = getIslandLineHeight();
+  const minWidth = Math.min(
+    currentWidth - TEXT_HORIZONTAL_PADDING * 2,
+    maxCorpusTokenWidth + islandInsetX * 2,
+  );
+  const minHeight = Math.max(74, lineHeight * 2.4);
+
   for (let index = 0; index < clusterRects.length; index++) {
     const rect = clusterRects[index];
     if (rect === undefined) return false;
     if (!isRectInsideStage(rect)) return false;
-    if (rect.w < 96 || rect.h < 74) return false;
+    if (rect.w < minWidth || rect.h < minHeight) return false;
     if (rectsOverlap(rect, safeRect, minGap * 0.9)) return false;
     if (
       corridorRects.some((corridor) =>
-        rectsOverlap(rect, corridor, minGap * 0.42),
+        rectsOverlap(rect, corridor, minGap * 0.3),
       )
     ) {
       return false;
@@ -439,25 +525,75 @@ function canPlaceIslandCluster(
   return true;
 }
 
+function buildFallbackIslandCandidates(): LayoutRect[] {
+  const islandInsetX = getIslandInsetX();
+  const baseWidth = clamp(
+    Math.max(currentWidth * 0.22, maxCorpusTokenWidth + islandInsetX * 2 + 12),
+    maxCorpusTokenWidth + islandInsetX * 2 + 12,
+    currentWidth * 0.34,
+  );
+  const baseHeight = clamp(
+    Math.max(currentHeight * 0.16, getIslandLineHeight() * 2.7),
+    getIslandLineHeight() * 2.4,
+    currentHeight * 0.24,
+  );
+  const anchors = [
+    { x: 0.18, y: 0.18 },
+    { x: 0.34, y: 0.2 },
+    { x: 0.66, y: 0.2 },
+    { x: 0.82, y: 0.18 },
+    { x: 0.16, y: 0.35 },
+    { x: 0.84, y: 0.35 },
+    { x: 0.16, y: 0.65 },
+    { x: 0.84, y: 0.65 },
+    { x: 0.18, y: 0.82 },
+    { x: 0.34, y: 0.8 },
+    { x: 0.66, y: 0.8 },
+    { x: 0.82, y: 0.82 },
+  ];
+
+  return anchors.map((anchor, index) => {
+    const width = baseWidth * (0.92 + hashNoise(index, currentWidth, 151) * 0.18);
+    const height =
+      baseHeight * (0.9 + hashNoise(index, currentHeight, 157) * 0.2);
+    const jitterX =
+      (hashNoise(index, currentWidth, 163) - 0.5) * Math.min(34, currentWidth * 0.05);
+    const jitterY =
+      (hashNoise(index, currentHeight, 167) - 0.5) *
+      Math.min(30, currentHeight * 0.045);
+
+    return {
+      x: clamp(
+        currentWidth * anchor.x + jitterX - width / 2,
+        TEXT_HORIZONTAL_PADDING,
+        currentWidth - TEXT_HORIZONTAL_PADDING - width,
+      ),
+      y: clamp(
+        currentHeight * anchor.y + jitterY - height / 2,
+        TEXT_VERTICAL_PADDING,
+        currentHeight - TEXT_VERTICAL_PADDING - height,
+      ),
+      w: width,
+      h: height,
+    };
+  });
+}
+
 function buildIslandRects(
   safeRect: SafeRect,
   corridorRects: LayoutRect[],
 ): LayoutRect[] {
-  const stageScale = Math.sqrt(
-    (currentWidth * currentHeight) / BASE_STAGE_AREA,
-  );
+  const area = currentWidth * currentHeight;
+  const viewportScale = getViewportFitScale();
   const clusters: LayoutCluster[] = [];
   const placedRects: LayoutRect[] = [];
-  const targetClusters = Math.round(
-    clamp(8 + (currentWidth * currentHeight) / 190_000, 10, 24),
-  );
-  const maxRects = Math.round(
-    clamp(20 + (currentWidth * currentHeight) / 120_000, 24, 52),
-  );
-  const baseGap = clamp(28 * stageScale, 20, 38);
+  const targetClusters = Math.round(clamp(5 + area / 240_000, 5, 18));
+  const minRects = Math.round(clamp(4 + area / 280_000, 5, 14));
+  const maxRects = Math.round(clamp(14 + area / 140_000, 16, 44));
+  const baseGap = clamp(24 * viewportScale, 14, 34);
   const safeCenterX = rectCenterX(safeRect);
   const safeCenterY = rectCenterY(safeRect);
-  const maxAttempts = targetClusters * 32;
+  const maxAttempts = targetClusters * 48;
 
   for (
     let attempt = 0;
@@ -479,7 +615,7 @@ function buildIslandRects(
       const corridor = corridorRects[corridorIndex];
       if (corridor === undefined) continue;
       const side = hashNoise(seed, 59) > 0.5 ? 1 : -1;
-      const flankGap = clamp(72 * stageScale, 54, 110);
+      const flankGap = clamp(72 * viewportScale, 44, 110);
       anchorX =
         side > 0 ? corridor.x + corridor.w + flankGap : corridor.x - flankGap;
       anchorY = corridor.y + corridor.h * (0.18 + hashNoise(seed, 61) * 0.64);
@@ -488,11 +624,11 @@ function buildIslandRects(
       const angle = Math.floor(hashNoise(seed, 67) * 4);
       const offsetX =
         safeRect.w / 2 +
-        clamp(120 * stageScale, 90, 152) +
+        clamp(120 * viewportScale, 72, 152) +
         hashNoise(seed, 71) * 88;
       const offsetY =
         safeRect.h / 2 +
-        clamp(84 * stageScale, 62, 124) +
+        clamp(84 * viewportScale, 54, 124) +
         hashNoise(seed, 73) * 72;
       anchorX = safeCenterX + (angle % 2 === 0 ? -offsetX : offsetX);
       anchorY = safeCenterY + (angle < 2 ? -offsetY : offsetY);
@@ -505,7 +641,7 @@ function buildIslandRects(
         hashNoise(seed, 83) * (currentHeight - TEXT_VERTICAL_PADDING * 2);
     }
 
-    const clusterRects = buildIslandCluster(anchorX, anchorY, seed, stageScale);
+    const clusterRects = buildIslandCluster(anchorX, anchorY, seed, viewportScale);
     const minGap = nearCorridor ? baseGap * 0.55 : baseGap;
     if (
       !canPlaceIslandCluster(
@@ -542,6 +678,37 @@ function buildIslandRects(
 
     clusters.push({ rects: clusterRects, score });
     placedRects.push(...clusterRects);
+  }
+
+  if (placedRects.length < minRects) {
+    const fallbackCandidates = buildFallbackIslandCandidates();
+    for (
+      let index = 0;
+      index < fallbackCandidates.length &&
+      placedRects.length < minRects &&
+      placedRects.length < maxRects;
+      index++
+    ) {
+      const candidate = fallbackCandidates[index];
+      if (candidate === undefined) continue;
+      if (
+        !canPlaceIslandCluster(
+          [candidate],
+          safeRect,
+          corridorRects,
+          placedRects,
+          baseGap * 0.68,
+        )
+      ) {
+        continue;
+      }
+
+      clusters.push({
+        rects: [candidate],
+        score: 160 - index * 3,
+      });
+      placedRects.push(candidate);
+    }
   }
 
   clusters.sort((a, b) => b.score - a.score);
@@ -600,58 +767,96 @@ function buildAmbientGlyphs(
   return glyphs;
 }
 
+function appendToken(
+  token: CorpusToken,
+  startX: number,
+  centerY: number,
+  blocks: TextBlock[],
+  fragment: DocumentFragment,
+  maxBlocks: number,
+): number {
+  let currentX = startX;
+
+  for (
+    let graphemeIndex = 0;
+    graphemeIndex < token.graphemes.length && blocks.length < maxBlocks;
+    graphemeIndex++
+  ) {
+    const grapheme = token.graphemes[graphemeIndex];
+    const graphemeWidth = token.graphemeWidths[graphemeIndex];
+    if (grapheme === undefined || graphemeWidth === undefined) continue;
+    const x = currentX + graphemeWidth / 2;
+    const element = createTextElement(grapheme);
+    fragment.appendChild(element);
+    blocks.push(new TextBlock(x, centerY, grapheme, element));
+    currentX += graphemeWidth;
+  }
+
+  return currentX;
+}
+
 function appendIslandLayout(
-  prepared: PreparedTextWithSegments,
   rect: LayoutRect,
   blocks: TextBlock[],
   fragment: DocumentFragment,
-  cursor: LayoutCursor,
+  cursor: number,
   maxBlocks: number,
-): LayoutCursor {
-  const left = rect.x + TEXT_ISLAND_INSET_X;
-  const right = rect.x + rect.w - TEXT_ISLAND_INSET_X;
-  const top = rect.y + TEXT_ISLAND_INSET_Y;
-  const bottom = rect.y + rect.h - TEXT_ISLAND_INSET_Y;
-  if (right - left < TEXT_CHAR_GAP * 2) return cursor;
+): number {
+  const islandInsetX = getIslandInsetX();
+  const islandInsetY = getIslandInsetY();
+  const lineHeight = getIslandLineHeight();
+  const wordGap = getIslandWordGap();
+  const left = rect.x + islandInsetX;
+  const right = rect.x + rect.w - islandInsetX;
+  const top = rect.y + islandInsetY;
+  const bottom = rect.y + rect.h - islandInsetY;
+  const availableWidth = right - left;
+  if (
+    availableWidth < TEXT_CHAR_GAP * 2 ||
+    availableWidth < maxCorpusTokenWidth ||
+    corpusTokens.length === 0
+  ) {
+    return cursor;
+  }
 
   for (
     let lineTop = top;
-    lineTop + TEXT_LINE_HEIGHT <= bottom && blocks.length < maxBlocks;
-    lineTop += TEXT_LINE_HEIGHT
+    lineTop + lineHeight <= bottom && blocks.length < maxBlocks;
+    lineTop += lineHeight
   ) {
-    let line: LayoutLine | null = layoutNextLine(
-      prepared,
-      cursor,
-      right - left,
-    );
-    if (line === null) {
-      cursor = { segmentIndex: 0, graphemeIndex: 0 };
-      line = layoutNextLine(prepared, cursor, right - left);
-    }
-    if (line === null) continue;
-
-    const graphemes = splitGraphemes(line.text);
+    const centerY = lineTop + lineHeight / 2;
     let currentX = left;
-    const centerY = lineTop + TEXT_LINE_HEIGHT / 2;
-    for (
-      let graphemeIndex = 0;
-      graphemeIndex < graphemes.length && blocks.length < maxBlocks;
-      graphemeIndex++
-    ) {
-      const grapheme = graphemes[graphemeIndex];
-      if (grapheme === undefined) continue;
-      const glyphWidth = measureTextWidth(grapheme, TEXT_FONT);
-      if (grapheme.trim().length > 0) {
-        const x = currentX + glyphWidth / 2;
-        const element = createTextElement(grapheme);
-        fragment.appendChild(element);
-        blocks.push(new TextBlock(x, centerY, grapheme, element));
+    let placedTokens = 0;
+    let skippedTokens = 0;
+
+    while (blocks.length < maxBlocks && skippedTokens < corpusTokens.length) {
+      const token = corpusTokens[cursor % corpusTokens.length];
+      if (token === undefined) break;
+
+      if (token.width > availableWidth) {
+        cursor = (cursor + 1) % corpusTokens.length;
+        skippedTokens++;
+        continue;
       }
-      currentX += glyphWidth;
-      if (currentX > right) break;
+
+      const gap = placedTokens > 0 ? wordGap : 0;
+      if (placedTokens > 0 && currentX + gap + token.width > right) break;
+
+      currentX += gap;
+      currentX = appendToken(
+        token,
+        currentX,
+        centerY,
+        blocks,
+        fragment,
+        maxBlocks,
+      );
+      cursor = (cursor + 1) % corpusTokens.length;
+      placedTokens++;
+      skippedTokens = 0;
     }
 
-    cursor = line.end;
+    if (placedTokens === 0) break;
   }
 
   return cursor;
@@ -667,35 +872,29 @@ export function buildStageLayout(
   textLayer.replaceChildren();
 
   const blocks: TextBlock[] = [];
+  const safeZoneScale = getSafeZoneScale();
+  const safeZoneWidth = SAFE_ZONE_WIDTH * safeZoneScale;
+  const safeZoneHeight = SAFE_ZONE_HEIGHT * safeZoneScale;
   const safeRect: SafeRect = {
-    x: currentWidth / 2 - SAFE_ZONE_WIDTH / 2,
-    y: currentHeight / 2 - SAFE_ZONE_HEIGHT / 2,
-    w: SAFE_ZONE_WIDTH,
-    h: SAFE_ZONE_HEIGHT,
+    x: currentWidth / 2 - safeZoneWidth / 2,
+    y: currentHeight / 2 - safeZoneHeight / 2,
+    w: safeZoneWidth,
+    h: safeZoneHeight,
   };
 
   const maxBlocks = Math.round(
     clamp(1500 + (currentWidth * currentHeight) / 5_500, 1500, TEXT_MAX_BLOCKS),
   );
-  const approximateTextLength = Math.max(1200, maxBlocks * 5);
-  const preparedCorpus = getPreparedCorpus(approximateTextLength);
   const corridorRects = buildCorridorRects(safeRect);
   const islandRects = buildIslandRects(safeRect, corridorRects);
   const ambient = buildAmbientGlyphs(safeRect, islandRects, corridorRects);
 
   const fragment = document.createDocumentFragment();
-  let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 };
+  let cursor = 0;
   for (let islandIndex = 0; islandIndex < islandRects.length; islandIndex++) {
     const island = islandRects[islandIndex];
     if (island === undefined) continue;
-    cursor = appendIslandLayout(
-      preparedCorpus,
-      island,
-      blocks,
-      fragment,
-      cursor,
-      maxBlocks,
-    );
+    cursor = appendIslandLayout(island, blocks, fragment, cursor, maxBlocks);
     if (blocks.length >= maxBlocks) break;
   }
 

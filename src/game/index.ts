@@ -128,22 +128,22 @@ function updateBuffDisplay(): void {
   const activeBuffs: string[] = [];
   if (state.buffs.freeze > state.frameCount) {
     activeBuffs.push(
-      `❄️冻结 ${((state.buffs.freeze - state.frameCount) / 60).toFixed(1)}s`,
+      `❄️冻结协议 ${((state.buffs.freeze - state.frameCount) / 60).toFixed(1)}s`,
     );
   }
   if (state.buffs.rapid > state.frameCount) {
     activeBuffs.push(
-      `🔥连发 ${((state.buffs.rapid - state.frameCount) / 60).toFixed(1)}s`,
+      `⚡极速补全 ${((state.buffs.rapid - state.frameCount) / 60).toFixed(1)}s`,
     );
   }
   if (state.buffs.invincible > state.frameCount) {
     activeBuffs.push(
-      `🛡️无敌 ${((state.buffs.invincible - state.frameCount) / 60).toFixed(1)}s`,
+      `🛡️代理护盾 ${((state.buffs.invincible - state.frameCount) / 60).toFixed(1)}s`,
     );
   }
   if (state.buffs.barrage > state.frameCount) {
     activeBuffs.push(
-      `🌪️环射 ${((state.buffs.barrage - state.frameCount) / 60).toFixed(1)}s`,
+      `🌪️多线齐射 ${((state.buffs.barrage - state.frameCount) / 60).toFixed(1)}s`,
     );
   }
   const nextText = activeBuffs.join(" | ");
