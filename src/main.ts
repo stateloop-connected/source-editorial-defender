@@ -37,11 +37,6 @@ type PowerUpDef = {
   duration: number;
 };
 
-type LayoutSlot = {
-  left: number;
-  right: number;
-};
-
 type SafeRect = {
   x: number;
   y: number;
@@ -49,8 +44,26 @@ type SafeRect = {
   h: number;
 };
 
+type LayoutRect = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+type LayoutCluster = {
+  rects: LayoutRect[];
+  score: number;
+};
+
+type StageLayout = {
+  textBlocks: TextBlock[];
+  ambientGlyphs: AmbientGlyph[];
+};
+
 type StageDomRefs = {
   stage: HTMLDivElement;
+  ambientLayer: HTMLDivElement;
   textLayer: HTMLDivElement;
   powerUpLayer: HTMLDivElement;
   enemyLayer: HTMLDivElement;
@@ -81,15 +94,32 @@ const TEXT_VERTICAL_PADDING = 22;
 const TEXT_HORIZONTAL_PADDING = 28;
 const SAFE_ZONE_WIDTH = 230;
 const SAFE_ZONE_HEIGHT = 230;
+const BASE_STAGE_AREA = 1920 * 1080;
 const TEXT_REPEL_RADIUS = 120;
 const TEXT_RESPAWN_DELAY = 240;
 const TEXT_RESPAWN_DURATION = 90;
 const TEXT_RESPAWN_STAGGER = 90;
 const TEXT_BUCKET_SIZE = 48;
 const TEXT_REPEL_RADIUS_SQ = TEXT_REPEL_RADIUS * TEXT_REPEL_RADIUS;
+const TEXT_ISLAND_INSET_X = 20;
+const TEXT_ISLAND_INSET_Y = 16;
+const TEXT_MAX_BLOCKS = 3600;
+const AMBIENT_GLYPH_MIN_COUNT = 40;
+const AMBIENT_GLYPH_MAX_COUNT = 110;
 
 const textCorpus =
   "在这片数字荒原中文字不仅是承载信息的媒介它们构成了物理的边界与防线当错误的数据流从四面八方涌来排版引擎开始重组为了维持系统的秩序你必须在这个动态的网格中穿梭每一次射击不仅是毁灭也是重构利用文字作为掩体生存下去直到最后一个周期结束。排版防线启动，文字避让协议生效，检测到敌对节点靠近。";
+const ambientGlyphChars = [
+  "。",
+  "·",
+  "、",
+  "•",
+  "°",
+  "∶",
+  "◦",
+  "※",
+  "░",
+] as const;
 const playerBulletChars = ["破", "灭", "碎", "击", "斩"] as const;
 const enemyBulletChars = ["厄", "凶", "死", "噬", "虚"] as const;
 const powerUpTypes: PowerUpDef[] = [
@@ -108,16 +138,17 @@ const buffs: Buffs = { freeze: 0, rapid: 0, invincible: 0, barrage: 0 };
 const mouse: MouseState = { x: -1000, y: -1000, isDown: false };
 
 let textGrid: TextBlock[] = [];
+let ambientGlyphs: AmbientGlyph[] = [];
 let bullets: Bullet[] = [];
 let enemies: Enemy[] = [];
 let particles: Particle[] = [];
 let powerUps: PowerUp[] = [];
 
-let preparedCorpus: PreparedTextWithSegments | null = null;
 let updateTimer: number | null = null;
 let gameOverRevealTimer: number | null = null;
 let gameOverFadeTimer: number | null = null;
 
+const ambientPool: Array<DomPoolItem<HTMLSpanElement>> = [];
 const bulletPool: Array<DomPoolItem<HTMLSpanElement>> = [];
 const enemyPool: Array<DomPoolItem<HTMLDivElement>> = [];
 const particlePool: Array<DomPoolItem<HTMLDivElement>> = [];
@@ -445,6 +476,54 @@ class Particle {
   }
 }
 
+class AmbientGlyph {
+  originX: number;
+  originY: number;
+  x: number;
+  y: number;
+  alpha: number;
+  driftSpeed: number;
+  swayX: number;
+  swayY: number;
+  phase: number;
+  rotation: number;
+  char: string;
+  size: number;
+
+  constructor(x: number, y: number, char: string, seed: number) {
+    this.originX = x;
+    this.originY = y;
+    this.x = x;
+    this.y = y;
+    this.alpha = 0.2 + hashNoise(seed, 11) * 0.22;
+    this.driftSpeed = 0.008 + hashNoise(seed, 17) * 0.018;
+    this.swayX = 10 + hashNoise(seed, 23) * 22;
+    this.swayY = 14 + hashNoise(seed, 29) * 30;
+    this.phase = hashNoise(seed, 31) * Math.PI * 2;
+    this.rotation = (hashNoise(seed, 37) - 0.5) * 24;
+    this.char = char;
+    this.size = 12 + hashNoise(seed, 41) * 8;
+  }
+
+  update(): void {
+    const primaryWave = frameCount * this.driftSpeed + this.phase;
+    const secondaryWave =
+      frameCount * this.driftSpeed * 0.63 + this.phase * 0.7;
+    this.x =
+      this.originX +
+      Math.cos(primaryWave) * this.swayX +
+      Math.sin(secondaryWave) * this.swayX * 0.35;
+    this.y =
+      this.originY +
+      Math.sin(primaryWave) * this.swayY +
+      Math.cos(secondaryWave) * this.swayY * 0.22;
+    this.alpha =
+      0.18 +
+      (Math.sin(primaryWave * 0.8) + 1) * 0.5 * 0.22 +
+      Math.max(0, Math.cos(secondaryWave)) * 0.08;
+  }
+}
+
 function getRequiredElement<T extends HTMLElement>(
   id: string,
   ctor: { new (): T },
@@ -458,6 +537,7 @@ function getRequiredElement<T extends HTMLElement>(
 
 function buildStageDom(): StageDomRefs {
   const stage = getRequiredElement("gameStage", HTMLDivElement);
+  const ambientLayer = getRequiredElement("ambientLayer", HTMLDivElement);
   const textLayer = getRequiredElement("textLayer", HTMLDivElement);
   const powerUpLayer = getRequiredElement("powerUpLayer", HTMLDivElement);
   const enemyLayer = getRequiredElement("enemyLayer", HTMLDivElement);
@@ -492,6 +572,7 @@ function buildStageDom(): StageDomRefs {
 
   return {
     stage,
+    ambientLayer,
     textLayer,
     powerUpLayer,
     enemyLayer,
@@ -548,6 +629,21 @@ function measureTextWidth(text: string, font: string): number {
   return width;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hashNoise(...values: number[]): number {
+  let sum = 0;
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+    if (value === undefined) continue;
+    sum += value * (12.9898 + i * 37.719);
+  }
+  const noise = Math.sin(sum) * 43758.5453123;
+  return noise - Math.floor(noise);
+}
+
 function repeatCorpus(minLength: number): string {
   const repeatCount = Math.max(1, Math.ceil(minLength / textCorpus.length));
   return textCorpus.repeat(repeatCount);
@@ -600,29 +696,6 @@ function roundRenderValue(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function carveSlots(
-  left: number,
-  right: number,
-  lineTop: number,
-  lineBottom: number,
-  safeRect: SafeRect,
-): LayoutSlot[] {
-  const slots: LayoutSlot[] = [];
-  if (lineBottom <= safeRect.y || lineTop >= safeRect.y + safeRect.h) {
-    slots.push({ left, right });
-    return slots;
-  }
-
-  if (safeRect.x - left >= TEXT_CHAR_GAP * 2) {
-    slots.push({ left, right: safeRect.x });
-  }
-  if (right - (safeRect.x + safeRect.w) >= TEXT_CHAR_GAP * 2) {
-    slots.push({ left: safeRect.x + safeRect.w, right });
-  }
-
-  return slots;
-}
-
 function createTextElement(char: string): HTMLSpanElement {
   const element = document.createElement("span");
   element.className = "text-block";
@@ -631,7 +704,538 @@ function createTextElement(char: string): HTMLSpanElement {
   return element;
 }
 
-function buildTextLayout(): TextBlock[] {
+function createAmbientGlyphElement(): HTMLSpanElement {
+  const element = document.createElement("span");
+  element.className = "ambient-glyph";
+  element.style.transform = "translate(-50%, -50%)";
+  dom.ambientLayer.appendChild(element);
+  return element;
+}
+
+function rectsOverlap(a: LayoutRect, b: LayoutRect, padding = 0): boolean {
+  return !(
+    a.x + a.w <= b.x - padding ||
+    a.x >= b.x + b.w + padding ||
+    a.y + a.h <= b.y - padding ||
+    a.y >= b.y + b.h + padding
+  );
+}
+
+function rectCenterX(rect: LayoutRect): number {
+  return rect.x + rect.w / 2;
+}
+
+function rectCenterY(rect: LayoutRect): number {
+  return rect.y + rect.h / 2;
+}
+
+function getRectBounds(rects: LayoutRect[]): LayoutRect {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (let i = 0; i < rects.length; i++) {
+    const rect = rects[i];
+    if (rect === undefined) continue;
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxX = Math.max(maxX, rect.x + rect.w);
+    maxY = Math.max(maxY, rect.y + rect.h);
+  }
+
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+function getRectGap(a: LayoutRect, b: LayoutRect): number {
+  const dx = Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), 0);
+  const dy = Math.max(b.y - (a.y + a.h), a.y - (b.y + b.h), 0);
+  return Math.hypot(dx, dy);
+}
+
+function isRectInsideStage(rect: LayoutRect): boolean {
+  return (
+    rect.x >= TEXT_HORIZONTAL_PADDING &&
+    rect.y >= TEXT_VERTICAL_PADDING &&
+    rect.x + rect.w <= cw - TEXT_HORIZONTAL_PADDING &&
+    rect.y + rect.h <= ch - TEXT_VERTICAL_PADDING
+  );
+}
+
+function connectCorridorNodes(
+  rects: LayoutRect[],
+  from: { x: number; y: number; width: number },
+  to: { x: number; y: number; width: number },
+  connectorHeight: number,
+): void {
+  const width = Math.max(from.width, to.width);
+  const top = Math.min(from.y, to.y);
+  const height = Math.abs(to.y - from.y);
+  const verticalHeight = Math.max(height, connectorHeight);
+  const verticalY = clamp(
+    top - Math.max(0, (connectorHeight - height) / 2),
+    TEXT_VERTICAL_PADDING,
+    ch - TEXT_VERTICAL_PADDING - verticalHeight,
+  );
+
+  rects.push({
+    x: from.x - width / 2,
+    y: verticalY,
+    w: width,
+    h: verticalHeight,
+  });
+
+  if (Math.abs(to.x - from.x) < 6) return;
+
+  rects.push({
+    x: Math.min(from.x, to.x) - width / 2,
+    y: to.y - connectorHeight / 2,
+    w: Math.abs(to.x - from.x) + width,
+    h: connectorHeight,
+  });
+}
+
+function buildCorridorRects(safeRect: SafeRect): LayoutRect[] {
+  const stageScale = Math.sqrt((cw * ch) / BASE_STAGE_AREA);
+  const corridorWidth = clamp(182 * stageScale, 170, 280);
+  const connectorHeight = clamp(106 * stageScale, 92, 156);
+  const chamberMarginX = clamp(54 * stageScale, 44, 88);
+  const chamberMarginY = clamp(38 * stageScale, 30, 64);
+  const chamber: LayoutRect = {
+    x: safeRect.x - chamberMarginX,
+    y: safeRect.y - chamberMarginY,
+    w: safeRect.w + chamberMarginX * 2,
+    h: safeRect.h + chamberMarginY * 2,
+  };
+  const driftLimit = clamp(cw * 0.14, 82, 210);
+  const topTravel = chamber.y - TEXT_VERTICAL_PADDING;
+  const bottomTravel = ch - TEXT_VERTICAL_PADDING - (chamber.y + chamber.h);
+  const topNodeCount = Math.max(
+    1,
+    Math.round(topTravel / clamp(210 * stageScale, 160, 240)),
+  );
+  const bottomNodeCount = Math.max(
+    1,
+    Math.round(bottomTravel / clamp(210 * stageScale, 160, 240)),
+  );
+  const centerX =
+    rectCenterX(chamber) +
+    (hashNoise(cw, ch, 5) - 0.5) * clamp(cw * 0.05, 18, 54);
+
+  const rects: LayoutRect[] = [chamber];
+  let previous = {
+    x: clamp(
+      centerX + (hashNoise(cw, ch, 11) - 0.5) * driftLimit * 0.25,
+      TEXT_HORIZONTAL_PADDING + corridorWidth / 2,
+      cw - TEXT_HORIZONTAL_PADDING - corridorWidth / 2,
+    ),
+    y: TEXT_VERTICAL_PADDING,
+    width: corridorWidth,
+  };
+
+  // Build a deterministic, winding spine so the arena keeps a readable route
+  // without opening the entire center into one oversized plaza.
+  for (let index = 1; index <= topNodeCount; index++) {
+    const progress = index / (topNodeCount + 1);
+    const node = {
+      x: clamp(
+        centerX +
+          (hashNoise(index, cw, 17) - 0.5) *
+            driftLimit *
+            (0.65 + progress * 0.35),
+        TEXT_HORIZONTAL_PADDING + corridorWidth / 2,
+        cw - TEXT_HORIZONTAL_PADDING - corridorWidth / 2,
+      ),
+      y: TEXT_VERTICAL_PADDING + topTravel * progress,
+      width: corridorWidth * (0.9 + hashNoise(index, ch, 19) * 0.18),
+    };
+    connectCorridorNodes(rects, previous, node, connectorHeight);
+    previous = node;
+  }
+
+  connectCorridorNodes(
+    rects,
+    previous,
+    { x: rectCenterX(chamber), y: chamber.y, width: corridorWidth * 1.02 },
+    connectorHeight,
+  );
+
+  previous = {
+    x: rectCenterX(chamber),
+    y: chamber.y + chamber.h,
+    width: corridorWidth * 1.02,
+  };
+  for (let index = 1; index <= bottomNodeCount; index++) {
+    const progress = index / (bottomNodeCount + 1);
+    const node = {
+      x: clamp(
+        centerX +
+          (hashNoise(index, cw, 23) - 0.5) *
+            driftLimit *
+            (0.7 + (1 - progress) * 0.25),
+        TEXT_HORIZONTAL_PADDING + corridorWidth / 2,
+        cw - TEXT_HORIZONTAL_PADDING - corridorWidth / 2,
+      ),
+      y: chamber.y + chamber.h + bottomTravel * progress,
+      width: corridorWidth * (0.88 + hashNoise(index, ch, 29) * 0.2),
+    };
+    connectCorridorNodes(rects, previous, node, connectorHeight);
+    previous = node;
+  }
+
+  connectCorridorNodes(
+    rects,
+    previous,
+    {
+      x: clamp(
+        centerX + (hashNoise(cw, ch, 31) - 0.5) * driftLimit * 0.22,
+        TEXT_HORIZONTAL_PADDING + corridorWidth / 2,
+        cw - TEXT_HORIZONTAL_PADDING - corridorWidth / 2,
+      ),
+      y: ch - TEXT_VERTICAL_PADDING,
+      width: corridorWidth,
+    },
+    connectorHeight,
+  );
+
+  const bayLength = clamp(205 * stageScale, 170, 320);
+  const bayHeight = clamp(92 * stageScale, 80, 132);
+  const bayY = clamp(
+    rectCenterY(chamber) + (hashNoise(cw, ch, 37) - 0.5) * chamber.h * 0.42,
+    TEXT_VERTICAL_PADDING + bayHeight / 2,
+    ch - TEXT_VERTICAL_PADDING - bayHeight / 2,
+  );
+  const baySide = hashNoise(cw, ch, 41) > 0.5 ? 1 : -1;
+  rects.push({
+    x:
+      baySide > 0
+        ? chamber.x + chamber.w - bayHeight * 0.25
+        : chamber.x - bayLength + bayHeight * 0.25,
+    y: bayY - bayHeight / 2,
+    w: bayLength,
+    h: bayHeight,
+  });
+
+  const spurLength = clamp(150 * stageScale, 124, 230);
+  const spurHeight = clamp(76 * stageScale, 68, 112);
+  const spurAnchorY = clamp(
+    chamber.y - clamp(70 * stageScale, 56, 96),
+    TEXT_VERTICAL_PADDING + spurHeight / 2,
+    ch - TEXT_VERTICAL_PADDING - spurHeight / 2,
+  );
+  rects.push({
+    x:
+      baySide > 0
+        ? chamber.x - spurLength + spurHeight * 0.2
+        : chamber.x + chamber.w - spurHeight * 0.2,
+    y: spurAnchorY - spurHeight / 2,
+    w: spurLength,
+    h: spurHeight,
+  });
+
+  return rects;
+}
+
+function buildIslandCluster(
+  anchorX: number,
+  anchorY: number,
+  seed: number,
+  stageScale: number,
+): LayoutRect[] {
+  const shapeNoise = hashNoise(seed, 1);
+  let width = clamp((178 + hashNoise(seed, 3) * 144) * stageScale, 138, 340);
+  let height = clamp((108 + hashNoise(seed, 5) * 116) * stageScale, 92, 250);
+
+  if (shapeNoise < 0.33) {
+    width *= 1.34;
+    height *= 0.74;
+  } else if (shapeNoise < 0.66) {
+    width *= 0.76;
+    height *= 1.3;
+  }
+
+  const main: LayoutRect = {
+    x: anchorX - width / 2,
+    y: anchorY - height / 2,
+    w: width,
+    h: height,
+  };
+  const rects: LayoutRect[] = [main];
+  const attachmentCount =
+    hashNoise(seed, 7) > 0.8 ? 2 : hashNoise(seed, 11) > 0.3 ? 1 : 0;
+
+  for (let index = 0; index < attachmentCount; index++) {
+    const side = Math.floor(hashNoise(seed, 13 + index * 17) * 4);
+    const along = (hashNoise(seed, 17 + index * 17) - 0.5) * 0.42;
+    const overlap = clamp(18 * stageScale, 12, 26);
+    const wideAttachment = hashNoise(seed, 19 + index * 17) > 0.52;
+    let rect: LayoutRect;
+
+    if (side === 0 || side === 1) {
+      const w = main.w * (0.34 + hashNoise(seed, 23 + index * 17) * 0.26);
+      const h =
+        main.h *
+        (wideAttachment
+          ? 0.8 + hashNoise(seed, 29 + index * 17) * 0.32
+          : 0.44 + hashNoise(seed, 31 + index * 17) * 0.24);
+      rect = {
+        x: side === 0 ? main.x - w + overlap : main.x + main.w - overlap,
+        y: main.y + (main.h - h) * 0.5 + main.h * along,
+        w,
+        h,
+      };
+    } else {
+      const w =
+        main.w *
+        (wideAttachment
+          ? 0.74 + hashNoise(seed, 37 + index * 17) * 0.28
+          : 0.46 + hashNoise(seed, 41 + index * 17) * 0.24);
+      const h = main.h * (0.34 + hashNoise(seed, 43 + index * 17) * 0.22);
+      rect = {
+        x: main.x + (main.w - w) * 0.5 + main.w * along,
+        y: side === 2 ? main.y - h + overlap : main.y + main.h - overlap,
+        w,
+        h,
+      };
+    }
+
+    rects.push(rect);
+  }
+
+  return rects;
+}
+
+function canPlaceIslandCluster(
+  clusterRects: LayoutRect[],
+  safeRect: SafeRect,
+  corridorRects: LayoutRect[],
+  placedRects: LayoutRect[],
+  minGap: number,
+): boolean {
+  for (let index = 0; index < clusterRects.length; index++) {
+    const rect = clusterRects[index];
+    if (rect === undefined) return false;
+    if (!isRectInsideStage(rect)) return false;
+    if (rect.w < 96 || rect.h < 74) return false;
+    if (rectsOverlap(rect, safeRect, minGap * 0.9)) return false;
+    if (
+      corridorRects.some((corridor) =>
+        rectsOverlap(rect, corridor, minGap * 0.42),
+      )
+    ) {
+      return false;
+    }
+    if (placedRects.some((placed) => rectsOverlap(rect, placed, minGap))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function buildIslandRects(
+  safeRect: SafeRect,
+  corridorRects: LayoutRect[],
+): LayoutRect[] {
+  const stageScale = Math.sqrt((cw * ch) / BASE_STAGE_AREA);
+  const clusters: LayoutCluster[] = [];
+  const placedRects: LayoutRect[] = [];
+  const targetClusters = Math.round(clamp(8 + (cw * ch) / 190_000, 10, 24));
+  const maxRects = Math.round(clamp(20 + (cw * ch) / 120_000, 24, 52));
+  const baseGap = clamp(28 * stageScale, 20, 38);
+  const safeCenterX = rectCenterX(safeRect);
+  const safeCenterY = rectCenterY(safeRect);
+  const maxAttempts = targetClusters * 32;
+
+  for (
+    let attempt = 0;
+    attempt < maxAttempts &&
+    clusters.length < targetClusters &&
+    placedRects.length < maxRects;
+    attempt++
+  ) {
+    const seed = attempt + cw * 0.17 + ch * 0.09;
+    const mode = hashNoise(seed, 47);
+    let anchorX = safeCenterX;
+    let anchorY = safeCenterY;
+    let nearCorridor = false;
+
+    if (mode < 0.56) {
+      const corridorIndex = Math.floor(
+        hashNoise(seed, 53) * corridorRects.length,
+      );
+      const corridor = corridorRects[corridorIndex];
+      if (corridor === undefined) continue;
+      const side = hashNoise(seed, 59) > 0.5 ? 1 : -1;
+      const flankGap = clamp(72 * stageScale, 54, 110);
+      anchorX =
+        side > 0 ? corridor.x + corridor.w + flankGap : corridor.x - flankGap;
+      anchorY = corridor.y + corridor.h * (0.18 + hashNoise(seed, 61) * 0.64);
+      nearCorridor = true;
+    } else if (mode < 0.82) {
+      const angle = Math.floor(hashNoise(seed, 67) * 4);
+      const offsetX =
+        safeRect.w / 2 +
+        clamp(120 * stageScale, 90, 152) +
+        hashNoise(seed, 71) * 88;
+      const offsetY =
+        safeRect.h / 2 +
+        clamp(84 * stageScale, 62, 124) +
+        hashNoise(seed, 73) * 72;
+      anchorX = safeCenterX + (angle % 2 === 0 ? -offsetX : offsetX);
+      anchorY = safeCenterY + (angle < 2 ? -offsetY : offsetY);
+    } else {
+      anchorX =
+        TEXT_HORIZONTAL_PADDING +
+        hashNoise(seed, 79) * (cw - TEXT_HORIZONTAL_PADDING * 2);
+      anchorY =
+        TEXT_VERTICAL_PADDING +
+        hashNoise(seed, 83) * (ch - TEXT_VERTICAL_PADDING * 2);
+    }
+
+    const clusterRects = buildIslandCluster(anchorX, anchorY, seed, stageScale);
+    const minGap = nearCorridor ? baseGap * 0.55 : baseGap;
+    if (
+      !canPlaceIslandCluster(
+        clusterRects,
+        safeRect,
+        corridorRects,
+        placedRects,
+        minGap,
+      )
+    ) {
+      continue;
+    }
+
+    const bounds = getRectBounds(clusterRects);
+    const safeDist = Math.hypot(
+      rectCenterX(bounds) - safeCenterX,
+      rectCenterY(bounds) - safeCenterY,
+    );
+    let nearestCorridorGap = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < corridorRects.length; index++) {
+      const corridor = corridorRects[index];
+      if (corridor === undefined) continue;
+      nearestCorridorGap = Math.min(
+        nearestCorridorGap,
+        getRectGap(bounds, corridor),
+      );
+    }
+
+    const score =
+      (nearCorridor ? 240 : 0) +
+      Math.max(0, 180 - safeDist * 0.38) +
+      Math.max(0, 110 - nearestCorridorGap * 1.8) +
+      clusterRects.length * 14;
+
+    clusters.push({ rects: clusterRects, score });
+    placedRects.push(...clusterRects);
+  }
+
+  clusters.sort((a, b) => b.score - a.score);
+  return clusters.flatMap((cluster) => cluster.rects).slice(0, maxRects);
+}
+
+function buildAmbientGlyphs(
+  safeRect: SafeRect,
+  islandRects: LayoutRect[],
+  corridorRects: LayoutRect[],
+): AmbientGlyph[] {
+  const ambientCount = Math.round(
+    clamp(
+      48 + (cw * ch) / 220_000,
+      AMBIENT_GLYPH_MIN_COUNT,
+      AMBIENT_GLYPH_MAX_COUNT,
+    ),
+  );
+  const glyphs: AmbientGlyph[] = [];
+  const maxAttempts = ambientCount * 18;
+
+  for (
+    let attempt = 0;
+    attempt < maxAttempts && glyphs.length < ambientCount;
+    attempt++
+  ) {
+    const x =
+      TEXT_HORIZONTAL_PADDING +
+      hashNoise(attempt, cw, 131) * (cw - TEXT_HORIZONTAL_PADDING * 2);
+    const y =
+      TEXT_VERTICAL_PADDING +
+      hashNoise(attempt, ch, 137) * (ch - TEXT_VERTICAL_PADDING * 2);
+    const probe: LayoutRect = { x: x - 14, y: y - 14, w: 28, h: 28 };
+    if (rectsOverlap(probe, safeRect, 24)) continue;
+    if (islandRects.some((island) => rectsOverlap(probe, island, 12))) continue;
+    if (corridorRects.some((corridor) => rectsOverlap(probe, corridor, 16))) {
+      continue;
+    }
+
+    const charIndex = Math.floor(
+      hashNoise(attempt, 149) * ambientGlyphChars.length,
+    );
+    const char = ambientGlyphChars[charIndex] ?? ambientGlyphChars[0];
+    glyphs.push(new AmbientGlyph(x, y, char, attempt + cw * 0.1 + ch * 0.05));
+  }
+
+  return glyphs;
+}
+
+function appendIslandLayout(
+  prepared: PreparedTextWithSegments,
+  rect: LayoutRect,
+  blocks: TextBlock[],
+  fragment: DocumentFragment,
+  cursor: LayoutCursor,
+  maxBlocks: number,
+): LayoutCursor {
+  const left = rect.x + TEXT_ISLAND_INSET_X;
+  const right = rect.x + rect.w - TEXT_ISLAND_INSET_X;
+  const top = rect.y + TEXT_ISLAND_INSET_Y;
+  const bottom = rect.y + rect.h - TEXT_ISLAND_INSET_Y;
+  if (right - left < TEXT_CHAR_GAP * 2) return cursor;
+
+  for (
+    let lineTop = top;
+    lineTop + TEXT_LINE_HEIGHT <= bottom && blocks.length < maxBlocks;
+    lineTop += TEXT_LINE_HEIGHT
+  ) {
+    let line: LayoutLine | null = layoutNextLine(
+      prepared,
+      cursor,
+      right - left,
+    );
+    if (line === null) {
+      cursor = { segmentIndex: 0, graphemeIndex: 0 };
+      line = layoutNextLine(prepared, cursor, right - left);
+    }
+    if (line === null) continue;
+
+    const graphemes = splitGraphemes(line.text);
+    let currentX = left;
+    const centerY = lineTop + TEXT_LINE_HEIGHT / 2;
+    for (
+      let graphemeIndex = 0;
+      graphemeIndex < graphemes.length && blocks.length < maxBlocks;
+      graphemeIndex++
+    ) {
+      const grapheme = graphemes[graphemeIndex];
+      if (grapheme === undefined) continue;
+      const glyphWidth = measureTextWidth(grapheme, TEXT_FONT);
+      if (grapheme.trim().length > 0) {
+        const x = currentX + glyphWidth / 2;
+        const element = createTextElement(grapheme);
+        fragment.appendChild(element);
+        blocks.push(new TextBlock(x, centerY, grapheme, element));
+      }
+      currentX += glyphWidth;
+      if (currentX > right) break;
+    }
+
+    cursor = line.end;
+  }
+
+  return cursor;
+}
+
+function buildStageLayout(): StageLayout {
   dom.textLayer.replaceChildren();
 
   const blocks: TextBlock[] = [];
@@ -642,68 +1246,33 @@ function buildTextLayout(): TextBlock[] {
     h: SAFE_ZONE_HEIGHT,
   };
 
-  const approximateTextLength = Math.ceil((cw * ch) / 8);
-  preparedCorpus = getPreparedCorpus(approximateTextLength);
+  const maxBlocks = Math.round(
+    clamp(1500 + (cw * ch) / 5_500, 1500, TEXT_MAX_BLOCKS),
+  );
+  const approximateTextLength = Math.max(1200, maxBlocks * 5);
+  const preparedCorpus = getPreparedCorpus(approximateTextLength);
+  const corridorRects = buildCorridorRects(safeRect);
+  const islandRects = buildIslandRects(safeRect, corridorRects);
+  const ambient = buildAmbientGlyphs(safeRect, islandRects, corridorRects);
 
   const fragment = document.createDocumentFragment();
   let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 };
-
-  for (
-    let lineTop = TEXT_VERTICAL_PADDING;
-    lineTop + TEXT_LINE_HEIGHT <= ch - TEXT_VERTICAL_PADDING;
-    lineTop += TEXT_LINE_HEIGHT
-  ) {
-    const lineBottom = lineTop + TEXT_LINE_HEIGHT;
-    const slots = carveSlots(
-      TEXT_HORIZONTAL_PADDING,
-      cw - TEXT_HORIZONTAL_PADDING,
-      lineTop,
-      lineBottom,
-      safeRect,
+  for (let islandIndex = 0; islandIndex < islandRects.length; islandIndex++) {
+    const island = islandRects[islandIndex];
+    if (island === undefined) continue;
+    cursor = appendIslandLayout(
+      preparedCorpus,
+      island,
+      blocks,
+      fragment,
+      cursor,
+      maxBlocks,
     );
-    for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
-      const slot = slots[slotIndex];
-      if (slot === undefined) continue;
-      const slotWidth = slot.right - slot.left;
-      if (slotWidth < TEXT_CHAR_GAP * 2) continue;
-
-      let line: LayoutLine | null = layoutNextLine(
-        preparedCorpus,
-        cursor,
-        slotWidth,
-      );
-      if (line === null) {
-        cursor = { segmentIndex: 0, graphemeIndex: 0 };
-        line = layoutNextLine(preparedCorpus, cursor, slotWidth);
-      }
-      if (line === null) continue;
-
-      const graphemes = splitGraphemes(line.text);
-      let currentX = slot.left;
-      const centerY = lineTop + TEXT_LINE_HEIGHT / 2;
-      for (
-        let graphemeIndex = 0;
-        graphemeIndex < graphemes.length;
-        graphemeIndex++
-      ) {
-        const grapheme = graphemes[graphemeIndex];
-        if (grapheme === undefined) continue;
-        const glyphWidth = measureTextWidth(grapheme, TEXT_FONT);
-        if (grapheme.trim().length > 0) {
-          const x = currentX + glyphWidth / 2;
-          const element = createTextElement(grapheme);
-          fragment.appendChild(element);
-          blocks.push(new TextBlock(x, centerY, grapheme, element));
-        }
-        currentX += glyphWidth;
-      }
-
-      cursor = line.end;
-    }
+    if (blocks.length >= maxBlocks) break;
   }
 
   dom.textLayer.appendChild(fragment);
-  return blocks;
+  return { textBlocks: blocks, ambientGlyphs: ambient };
 }
 
 function buildBulletElement(): HTMLSpanElement {
@@ -789,7 +1358,9 @@ function resizeStage(): void {
   ch = window.innerHeight;
   dom.stage.style.width = `${cw}px`;
   dom.stage.style.height = `${ch}px`;
-  textGrid = buildTextLayout();
+  const layout = buildStageLayout();
+  textGrid = layout.textBlocks;
+  ambientGlyphs = layout.ambientGlyphs;
   rebuildTextBuckets();
 
   if (gameState !== "start") {
@@ -909,7 +1480,6 @@ function startGame(): void {
   enemies = [];
   particles = [];
   powerUps = [];
-  preparedCorpus = null;
   setScore(0);
   frameCount = 0;
 
@@ -1004,6 +1574,10 @@ function update(): void {
   }
 
   updateBuffDisplay();
+
+  for (let i = 0; i < ambientGlyphs.length; i++) {
+    ambientGlyphs[i]?.update();
+  }
 
   for (let i = 0; i < textGrid.length; i++) {
     textGrid[i]?.update();
@@ -1144,6 +1718,20 @@ function renderTextBlocks(): void {
 }
 
 function renderDynamicEntities(): void {
+  syncPool(ambientPool, ambientGlyphs.length, createAmbientGlyphElement);
+  for (let i = 0; i < ambientGlyphs.length; i++) {
+    const glyph = ambientGlyphs[i];
+    const poolItem = ambientPool[i];
+    if (glyph === undefined || poolItem === undefined) continue;
+    const element = poolItem.element;
+    element.innerText = glyph.char;
+    element.style.left = `${glyph.x}px`;
+    element.style.top = `${glyph.y}px`;
+    element.style.opacity = `${glyph.alpha}`;
+    element.style.fontSize = `${glyph.size}px`;
+    element.style.transform = `translate(-50%, -50%) rotate(${glyph.rotation}deg)`;
+  }
+
   syncPool(bulletPool, bullets.length, buildBulletElement);
   for (let i = 0; i < bullets.length; i++) {
     const bullet = bullets[i];

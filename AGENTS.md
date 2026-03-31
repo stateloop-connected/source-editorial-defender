@@ -4,7 +4,7 @@ This document helps AI agents and developers quickly understand the current arch
 
 ## 1. 项目概述 (Project Overview)
 
-概念: 一款受网页排版引擎启发的生存射击游戏。背景文字会围绕玩家产生“避让”效果，玩家驾驶坦克在文字构成的动态障碍场中生存并反击敌对节点。
+概念: 一款受网页排版引擎启发的生存射击游戏。背景文字会围绕玩家产生“避让”效果，玩家驾驶坦克在随机文字岛链和曲折主通道构成的动态障碍场中生存并反击敌对节点。
 
 当前技术栈:
 - Vite
@@ -44,6 +44,7 @@ This document helps AI agents and developers quickly understand the current arch
 
 当前舞台由多个 DOM Layer 组成：
 
+- `ambientLayer`: 留白区漂浮字粒
 - `textLayer`: 背景文字墙
 - `powerUpLayer`: 道具
 - `enemyLayer`: 敌人
@@ -55,6 +56,7 @@ This document helps AI agents and developers quickly understand the current arch
 
 渲染特点:
 - 背景文字和动态实体都使用绝对定位 DOM 元素。
+- 留白区漂浮字粒是纯视觉层，不参与碰撞，也不写入 `textBuckets`；它们应避开主通道，保持路径可读性。
 - `TextBlock` 已加入“脏更新”渲染保护，只在位置、颜色、透明度变化时才写样式。
 - 动态实体仍使用对象池复用 DOM 节点，避免频繁创建销毁。
 
@@ -67,7 +69,7 @@ This document helps AI agents and developers quickly understand the current arch
 - `score`: 当前得分
 - `buffs`: `{ freeze, rapid, invincible, barrage }`，存的是 buff 失效帧
 - `mouse`: 鼠标/触摸输入状态
-- `textGrid`, `bullets`, `enemies`, `particles`, `powerUps`: 各类实体数组
+- `textGrid`, `ambientGlyphs`, `bullets`, `enemies`, `particles`, `powerUps`: 各类实体数组
 
 性能相关缓存：
 
@@ -82,17 +84,18 @@ This document helps AI agents and developers quickly understand the current arch
 
 - 使用 `prepareWithSegments()` 预处理语料
 - 使用 `layoutNextLine()` 按行推进
-- 通过 `cursor` 实现逐行布局
-- 通过 `carveSlots()` 在中间安全区两侧分配可用文本槽位
+- 通过 `cursor` 实现逐岛区逐行布局
+- 先生成曲折主通道与中央战斗室，再在非通道区域放置随机簇状文字岛矩形
 
 这套机制的意义：
 
-- 适合做“绕障碍逐行排版”
+- 适合做“随机岛链 + 主通道”的排版地形
 - 可以在窗口变化时重建文字墙
+- 可对文字总量设置预算，避免高分辨率下 DOM 节点数线性失控
 - 避免依赖 DOM reflow 做文本测量
 
 Agent 注意:
-- 如果修改字体、字距、语料密度或安全区尺寸，请同步检查 `buildTextLayout()`
+- 如果修改字体、字距、语料密度、岛链尺寸、主通道宽度或安全区尺寸，请同步检查 `buildStageLayout()`
 - 如果新增排版模式，优先延续 `prepareWithSegments() + layoutNextLine()` 这条路径
 - 尽量复用 prepared/cached 数据，不要在高频路径里重新准备文本
 
