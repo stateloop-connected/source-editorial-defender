@@ -15,7 +15,7 @@ function getRequiredElement<T extends HTMLElement>(
 
 export function buildStageDom(): StageDomRefs {
   const stage = getRequiredElement("gameStage", HTMLDivElement);
-  const ambientLayer = getRequiredElement("ambientLayer", HTMLDivElement);
+  const ambientLayer = getRequiredElement("ambientLayer", HTMLCanvasElement);
   const textLayer = getRequiredElement("textLayer", HTMLDivElement);
   const powerUpLayer = getRequiredElement("powerUpLayer", HTMLDivElement);
   const enemyLayer = getRequiredElement("enemyLayer", HTMLDivElement);

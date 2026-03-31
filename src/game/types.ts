@@ -49,7 +49,7 @@ export type LayoutCluster = {
 
 export type StageDomRefs = {
   stage: HTMLDivElement;
-  ambientLayer: HTMLDivElement;
+  ambientLayer: HTMLCanvasElement;
   textLayer: HTMLDivElement;
   powerUpLayer: HTMLDivElement;
   enemyLayer: HTMLDivElement;

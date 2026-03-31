@@ -25,7 +25,7 @@
 - 文字岛会按分辨率自适应配平尺寸、间距与保底数量，避免低分辨率下地图过空
 - 逻辑更新与渲染分离，便于继续做性能优化
 - 集成 `stats.js` 实时观察渲染 FPS / 帧耗时
-- 纯 TypeScript + DOM 分层渲染，便于直接调整玩法和视觉细节
+- 纯 TypeScript + DOM/Canvas 混合分层渲染（`ambientLayer` 使用 canvas），便于直接调整玩法和视觉细节
 
 ## 操作方式
 
@@ -90,7 +90,7 @@ VS Code / Cursor:
 - [src/game/state.ts](src/game/state.ts): 全局运行时状态
 - [src/game/entities.ts](src/game/entities.ts): 核心实体定义与局部更新逻辑
 - [src/game/layout.ts](src/game/layout.ts): `pretext` 关键词布局、通道/岛链生成与文字分桶
-- [src/game/rendering.ts](src/game/rendering.ts): DOM 对象池与渲染同步
+- [src/game/rendering.ts](src/game/rendering.ts): 渲染同步（`ambientLayer` canvas + 动态实体 DOM 对象池）
 - [src/game/dom.ts](src/game/dom.ts): DOM 引用收集、UI 显隐与调试面板初始化
 - [src/game/constants.ts](src/game/constants.ts): 常量、语料、道具配置
 - [src/game/types.ts](src/game/types.ts): 共享类型定义
@@ -115,7 +115,7 @@ VS Code / Cursor:
 ### 游戏循环
 
 - `update()` 以固定 60 FPS 执行，负责移动、碰撞、刷怪、buff 与生命周期
-- `renderLoop()` 使用 `requestAnimationFrame()`，负责把状态同步到 DOM
+- `renderLoop()` 使用 `requestAnimationFrame()`，负责把状态同步到 canvas 与 DOM
 - `stats.js` 挂在 `renderLoop()` 外围，显示实时 FPS 和渲染耗时
 - 全部持续时间逻辑都依赖 `frameCount`
 - `Esc` 会把游戏切到暂停态，此时逻辑推进和 `frameCount` 都会冻结，但当前画面会继续渲染并显示暂停蒙层
@@ -177,5 +177,5 @@ VS Code / Cursor:
 - 游戏状态重置入口在 [src/game/index.ts](src/game/index.ts) 的 `startGame()`
 - 窗口变化时会走 [src/game/index.ts](src/game/index.ts) 的 `resizeStage()` 重新生成文字布局
 - 文本地形和空间分桶逻辑集中在 [src/game/layout.ts](src/game/layout.ts)
-- 动态实体 DOM 池与渲染同步集中在 [src/game/rendering.ts](src/game/rendering.ts)
+- `ambientLayer` 的 canvas 批量绘制与动态实体 DOM 池渲染同步集中在 [src/game/rendering.ts](src/game/rendering.ts)
 - 如果你修改了主循环、渲染模型或性能策略，请同步更新 [AGENTS.md](AGENTS.md)

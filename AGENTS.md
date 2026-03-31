@@ -9,7 +9,7 @@ This document helps AI agents and developers quickly understand the current arch
 当前技术栈:
 - Vite
 - TypeScript
-- DOM 分层渲染
+- DOM/Canvas 混合分层渲染（`ambientLayer` 为 canvas，其余主层为 DOM）
 - `oxlint` + `oxlint-tsgolint`（用于 CLI 与 VS Code 的 type-aware linting）
 - `@chenglou/pretext` 用于高性能关键词排版测量
 - `stats.js` 用于开发期 FPS / 帧耗时监视
@@ -21,7 +21,7 @@ This document helps AI agents and developers quickly understand the current arch
 - [src/game/state.ts](src/game/state.ts): 全局运行时状态容器
 - [src/game/entities.ts](src/game/entities.ts): `TextBlock` / `Bullet` / `Enemy` / `PowerUp` / `Particle` / `AmbientGlyph`
 - [src/game/layout.ts](src/game/layout.ts): `pretext` 关键词布局、主通道与文字岛生成、文字空间分桶重建
-- [src/game/rendering.ts](src/game/rendering.ts): DOM 对象池与渲染同步
+- [src/game/rendering.ts](src/game/rendering.ts): `ambientLayer` canvas 绘制 + 动态实体 DOM 对象池渲染同步
 - [src/game/dom.ts](src/game/dom.ts): 舞台 DOM 引用收集、UI 显隐与 `stats.js` 面板初始化
 - [src/game/constants.ts](src/game/constants.ts): 常量、语料和道具定义
 - [src/game/types.ts](src/game/types.ts): 共享类型
@@ -29,14 +29,14 @@ This document helps AI agents and developers quickly understand the current arch
 - [index.html](index.html): 舞台 DOM 结构和样式
 - [package.json](package.json): 构建脚本与依赖
 
-注意: 项目已经不是旧版的“单文件 + Canvas 2D”架构，当前实现以绝对定位 DOM 节点作为主要渲染手段。
+注意: 项目已经不是旧版的“单文件 + Canvas 2D”架构，当前实现是以 DOM 为主、局部 canvas（`ambientLayer`）为辅的分层渲染手段。
 
 ## 2. 核心架构与主循环 (Architecture & Game Loop)
 
 游戏采用逻辑更新与渲染分离的双循环机制：
 
 - `update()`: 由 `setInterval(update, 1000 / 60)` 驱动，固定 60 FPS，负责移动、碰撞、刷怪、buff、生命周期处理等逻辑。
-- `renderLoop()`: 由 `requestAnimationFrame(renderLoop)` 驱动，负责把当前状态同步到 DOM。
+- `renderLoop()`: 由 `requestAnimationFrame(renderLoop)` 驱动，负责把当前状态同步到 canvas 与 DOM。
 - `stats.js` 包裹在 `renderLoop()` 外围，用于观测真实渲染帧率与每帧耗时。
 - `Esc` 可在 `playing` 与 `paused` 状态间切换；暂停时保留当前画面并冻结逻辑推进。
 
@@ -44,7 +44,7 @@ This document helps AI agents and developers quickly understand the current arch
 - `src/main.ts` 只做 bootstrap
 - `src/game/index.ts` 持有运行时编排权，负责调用 `resizeStage()`、`startGame()`、`update()`、`renderLoop()`
 - `src/game/layout.ts` 专注静态文字地形和空间分桶
-- `src/game/rendering.ts` 专注把状态同步到 DOM，并维护动态实体对象池
+- `src/game/rendering.ts` 专注把状态同步到 `ambientLayer` canvas 与各 DOM layer，并维护动态实体对象池
 - `src/game/entities.ts` 专注实体数据结构与局部更新逻辑
 
 核心时间轴:
@@ -58,7 +58,7 @@ This document helps AI agents and developers quickly understand the current arch
 
 ## 3. 当前渲染模型 (Rendering Model)
 
-当前舞台由多个 DOM Layer 组成：
+当前舞台由多个渲染 Layer 组成（1 个 canvas + 多个 DOM layer）：
 
 - `ambientLayer`: 留白区漂浮字粒
 - `textLayer`: 背景文字墙
@@ -71,7 +71,8 @@ This document helps AI agents and developers quickly understand the current arch
 - `stats.js` 调试面板: 固定在右下角，独立于 HUD
 
 渲染特点:
-- 背景文字和动态实体都使用绝对定位 DOM 元素。
+- 漂浮字粒在 `ambientLayer` 的 canvas 上批量绘制（纯视觉层，不参与碰撞）。
+- 背景文字墙与动态实体使用绝对定位 DOM 元素。
 - 留白区漂浮字粒是纯视觉层，不参与碰撞，也不写入 `textBuckets`；它们应避开主通道，保持路径可读性。
 - `TextBlock` 已加入“脏更新”渲染保护，只在位置、颜色、透明度变化时才写样式。
 - 动态实体仍使用对象池复用 DOM 节点，避免频繁创建销毁。

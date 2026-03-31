@@ -75,23 +75,6 @@
         text-shadow: 0 0 10px rgba(100, 116, 139, 0.05);
       }
 
-      .ambient-glyph {
-        position: absolute;
-        left: 0;
-        top: 0;
-        color: rgba(148, 163, 184, 0.55);
-        font:
-          600 14px "Trebuchet MS",
-          Verdana,
-          sans-serif;
-        line-height: 1;
-        letter-spacing: 0.12em;
-        user-select: none;
-        white-space: pre;
-        text-shadow: 0 0 12px rgba(148, 163, 184, 0.12);
-        will-change: left, top, transform, opacity;
-      }
-
       .bullet,
       .enemy,
       .powerup,
@@ -434,7 +417,7 @@
 
   <body>
     <div id="gameStage" aria-hidden="true">
-      <div id="ambientLayer" class="game-layer"></div>
+      <canvas id="ambientLayer" class="game-layer"></canvas>
       <div id="textLayer" class="game-layer"></div>
       <div id="powerUpLayer" class="game-layer"></div>
       <div id="enemyLayer" class="game-layer"></div>

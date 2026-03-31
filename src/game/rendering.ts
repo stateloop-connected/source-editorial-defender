@@ -3,6 +3,9 @@ import { roundRenderValue } from "./utils";
 import type { GameStore } from "./state";
 import type { DomPoolItem, StageDomRefs } from "./types";
 
+const AMBIENT_FONT_FAMILY = '"Trebuchet MS", Verdana, sans-serif';
+const AMBIENT_FONT_WEIGHT = 600;
+
 function buildBulletElement(dom: StageDomRefs): HTMLSpanElement {
   const element = document.createElement("span");
   element.className = "bullet";
@@ -38,14 +41,6 @@ function buildPowerUpElement(dom: StageDomRefs): HTMLDivElement {
   return element;
 }
 
-function createAmbientGlyphElement(dom: StageDomRefs): HTMLSpanElement {
-  const element = document.createElement("span");
-  element.className = "ambient-glyph";
-  element.style.transform = "translate(-50%, -50%)";
-  dom.ambientLayer.appendChild(element);
-  return element;
-}
-
 function syncPool<T extends HTMLElement>(
   pool: Array<DomPoolItem<T>>,
   count: number,
@@ -65,11 +60,67 @@ function syncPool<T extends HTMLElement>(
 export function createRenderer(dom: StageDomRefs): {
   render: (state: GameStore) => void;
 } {
-  const ambientPool: Array<DomPoolItem<HTMLSpanElement>> = [];
+  const ambientCanvas = dom.ambientLayer;
+  const ambientContextMaybe = ambientCanvas.getContext("2d");
+  if (ambientContextMaybe === null) {
+    throw new Error("Expected #ambientLayer to support CanvasRenderingContext2D.");
+  }
+  const ambientContext = ambientContextMaybe;
+  let ambientCanvasCssWidth = 0;
+  let ambientCanvasCssHeight = 0;
+  let ambientCanvasScale = 1;
   const bulletPool: Array<DomPoolItem<HTMLSpanElement>> = [];
   const enemyPool: Array<DomPoolItem<HTMLDivElement>> = [];
   const particlePool: Array<DomPoolItem<HTMLDivElement>> = [];
   const powerUpPool: Array<DomPoolItem<HTMLDivElement>> = [];
+
+  function syncAmbientCanvasSize(stageWidth: number, stageHeight: number): void {
+    const nextCssWidth = Math.max(1, Math.round(stageWidth));
+    const nextCssHeight = Math.max(1, Math.round(stageHeight));
+    const nextScale = Math.max(1, window.devicePixelRatio || 1);
+    const nextRenderWidth = Math.round(nextCssWidth * nextScale);
+    const nextRenderHeight = Math.round(nextCssHeight * nextScale);
+    const isSizeChanged =
+      nextCssWidth !== ambientCanvasCssWidth ||
+      nextCssHeight !== ambientCanvasCssHeight ||
+      nextRenderWidth !== ambientCanvas.width ||
+      nextRenderHeight !== ambientCanvas.height ||
+      nextScale !== ambientCanvasScale;
+
+    if (!isSizeChanged) return;
+
+    ambientCanvasCssWidth = nextCssWidth;
+    ambientCanvasCssHeight = nextCssHeight;
+    ambientCanvasScale = nextScale;
+    ambientCanvas.style.width = `${nextCssWidth}px`;
+    ambientCanvas.style.height = `${nextCssHeight}px`;
+    ambientCanvas.width = nextRenderWidth;
+    ambientCanvas.height = nextRenderHeight;
+  }
+
+  function renderAmbientGlyphs(state: GameStore): void {
+    syncAmbientCanvasSize(state.cw, state.ch);
+    ambientContext.setTransform(1, 0, 0, 1, 0, 0);
+    ambientContext.clearRect(0, 0, ambientCanvas.width, ambientCanvas.height);
+    ambientContext.setTransform(ambientCanvasScale, 0, 0, ambientCanvasScale, 0, 0);
+    ambientContext.textAlign = "center";
+    ambientContext.textBaseline = "middle";
+    ambientContext.fillStyle = "rgb(148, 163, 184)";
+    ambientContext.shadowColor = "rgba(148, 163, 184, 0.12)";
+    ambientContext.shadowBlur = 12;
+
+    for (let i = 0; i < state.ambientGlyphs.length; i++) {
+      const glyph = state.ambientGlyphs[i];
+      if (glyph === undefined) continue;
+      ambientContext.save();
+      ambientContext.translate(roundRenderValue(glyph.x), roundRenderValue(glyph.y));
+      ambientContext.rotate((glyph.rotation * Math.PI) / 180);
+      ambientContext.globalAlpha = Math.max(0, Math.min(1, glyph.alpha));
+      ambientContext.font = `${AMBIENT_FONT_WEIGHT} ${roundRenderValue(glyph.size)}px ${AMBIENT_FONT_FAMILY}`;
+      ambientContext.fillText(glyph.char, 0, 0);
+      ambientContext.restore();
+    }
+  }
 
   function renderTextBlocks(state: GameStore): void {
     for (let i = 0; i < state.textGrid.length; i++) {
@@ -113,21 +164,7 @@ export function createRenderer(dom: StageDomRefs): {
   }
 
   function renderDynamicEntities(state: GameStore): void {
-    syncPool(ambientPool, state.ambientGlyphs.length, () =>
-      createAmbientGlyphElement(dom),
-    );
-    for (let i = 0; i < state.ambientGlyphs.length; i++) {
-      const glyph = state.ambientGlyphs[i];
-      const poolItem = ambientPool[i];
-      if (glyph === undefined || poolItem === undefined) continue;
-      const element = poolItem.element;
-      element.innerText = glyph.char;
-      element.style.left = `${glyph.x}px`;
-      element.style.top = `${glyph.y}px`;
-      element.style.opacity = `${glyph.alpha}`;
-      element.style.fontSize = `${glyph.size}px`;
-      element.style.transform = `translate(-50%, -50%) rotate(${glyph.rotation}deg)`;
-    }
+    renderAmbientGlyphs(state);
 
     syncPool(bulletPool, state.bullets.length, () => buildBulletElement(dom));
     for (let i = 0; i < state.bullets.length; i++) {
