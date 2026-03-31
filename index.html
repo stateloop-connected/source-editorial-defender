@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>排版防线 - Editorial Defender</title>
+  <style>
+    :root {
+      --stage-bg: #0f172a;
+      --text-font: 18px "Trebuchet MS", Verdana, sans-serif;
+      --text-line-height: 30px;
+      --ui-font: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      --hud-mono-font: Consolas, "SFMono-Regular", Menlo, Monaco, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top, rgba(34, 211, 238, 0.12), transparent 32%),
+        radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.12), transparent 30%),
+        var(--stage-bg);
+      color: white;
+      font-family: var(--ui-font);
+      cursor: crosshair;
+    }
+
+    #gameStage {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      isolation: isolate;
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.4), rgba(15, 23, 42, 0.92)),
+        radial-gradient(circle at center, rgba(30, 41, 59, 0.7), transparent 65%);
+    }
+
+    .game-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .text-block {
+      position: absolute;
+      left: 0;
+      top: 0;
+      font: var(--text-font);
+      line-height: var(--text-line-height);
+      color: #334155;
+      white-space: pre;
+      user-select: none;
+      will-change: left, top, opacity, color;
+      text-shadow: 0 0 10px rgba(100, 116, 139, 0.05);
+    }
+
+    .bullet,
+    .enemy,
+    .powerup,
+    .particle,
+    .tank {
+      position: absolute;
+      left: 0;
+      top: 0;
+      pointer-events: none;
+      will-change: left, top, transform, opacity;
+    }
+
+    .bullet {
+      font: 700 16px "Trebuchet MS", Verdana, sans-serif;
+      line-height: 16px;
+      white-space: pre;
+      user-select: none;
+      transform: translate(-50%, -50%);
+    }
+
+    .enemy {
+      width: 30px;
+      height: 30px;
+      transform-origin: 50% 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .enemy-shape {
+      position: absolute;
+      inset: 0;
+      clip-path: polygon(100% 50%, 16% 16%, 16% 84%);
+      background: #ef4444;
+      filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.65));
+    }
+
+    .enemy-core {
+      position: absolute;
+      left: 7px;
+      top: 11px;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #fee2e2;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.55);
+    }
+
+    .powerup {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      transform: translate(-50%, -50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font: 700 18px "Trebuchet MS", Verdana, sans-serif;
+      color: white;
+      user-select: none;
+    }
+
+    .particle {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      transform: translate(-50%, -50%);
+    }
+
+    .tank {
+      width: 58px;
+      height: 58px;
+      transform-origin: 50% 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .tank-barrel {
+      position: absolute;
+      left: 28px;
+      top: 25px;
+      width: 25px;
+      height: 8px;
+      border-radius: 999px;
+      background: #22d3ee;
+      box-shadow: 0 0 14px rgba(34, 211, 238, 0.55);
+    }
+
+    .tank-body {
+      position: absolute;
+      left: 13px;
+      top: 13px;
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: #06b6d4;
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.72);
+    }
+
+    .tank-core {
+      position: absolute;
+      left: 23px;
+      top: 23px;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: #ffffff;
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.7);
+    }
+
+    .tank-shield {
+      position: absolute;
+      inset: 4px;
+      border-radius: 999px;
+      border: 3px solid #a78bfa;
+      box-shadow: 0 0 18px rgba(167, 139, 250, 0.6);
+      opacity: 0;
+      transition: opacity 0.12s linear;
+    }
+
+    .interactive {
+      pointer-events: auto;
+    }
+
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+      transition: opacity 0.5s ease;
+    }
+
+    .screen {
+      padding: 32px;
+      text-align: center;
+    }
+
+    .screen-start {
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(6px);
+    }
+
+    .screen-gameover {
+      background: rgba(127, 29, 29, 0.9);
+      backdrop-filter: blur(12px);
+    }
+
+    .screen-title {
+      margin: 0 0 16px;
+      font-size: clamp(3.5rem, 8vw, 4.5rem);
+      font-weight: 800;
+      letter-spacing: 0.35em;
+      text-indent: 0.35em;
+    }
+
+    .screen-copy {
+      max-width: 32rem;
+      margin: 0 0 32px;
+      color: #cbd5e1;
+      text-align: center;
+      font-size: 1.125rem;
+      line-height: 1.7;
+    }
+
+    .screen-copy-accent-cyan,
+    .screen-copy-accent-indigo {
+      font-weight: 700;
+    }
+
+    .screen-copy-accent-cyan {
+      color: #22d3ee;
+    }
+
+    .screen-copy-accent-indigo {
+      color: #818cf8;
+    }
+
+    .screen-subtitle {
+      margin: 0 0 32px;
+      font-size: 1.5rem;
+    }
+
+    .screen-subtitle-danger {
+      color: #fecaca;
+    }
+
+    .screen-score {
+      margin: 0 0 32px;
+      font-size: 1.25rem;
+    }
+
+    .screen-score-value {
+      font-size: 1.875rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .game-button {
+      padding: 12px 32px;
+      border: 0;
+      border-radius: 999px;
+      color: #ffffff;
+      font: 700 1.25rem var(--ui-font);
+      transition:
+        background-color 0.18s ease,
+        transform 0.18s ease,
+        box-shadow 0.18s ease;
+    }
+
+    .game-button:hover {
+      transform: scale(1.05);
+    }
+
+    .game-button:active {
+      transform: scale(0.95);
+    }
+
+    .game-button-cyan {
+      background: #0891b2;
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.6);
+    }
+
+    .game-button-cyan:hover {
+      background: #06b6d4;
+    }
+
+    .game-button-danger {
+      background: #dc2626;
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+    }
+
+    .game-button-danger:hover {
+      background: #ef4444;
+    }
+
+    .hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      width: 100%;
+      padding: 24px;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .hud-score {
+      font: 600 1.5rem var(--hud-mono-font);
+      color: #22d3ee;
+    }
+
+    .hud-buff {
+      margin-top: 8px;
+      color: #fde047;
+      font-size: 1.125rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-shadow: 0 1px 6px rgba(15, 23, 42, 0.45);
+    }
+
+    .hud-help {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      text-align: right;
+    }
+
+    .is-hidden {
+      display: none;
+    }
+
+    .is-transparent {
+      opacity: 0;
+    }
+
+    .neon-text {
+      text-shadow: 0 0 10px rgba(6, 182, 212, 0.8), 0 0 20px rgba(6, 182, 212, 0.5);
+    }
+
+    .neon-text-red {
+      text-shadow: 0 0 10px rgba(239, 68, 68, 0.8), 0 0 20px rgba(239, 68, 68, 0.5);
+    }
+
+    @media (max-width: 720px) {
+      .screen {
+        padding: 24px;
+      }
+
+      .screen-title {
+        font-size: clamp(2.75rem, 15vw, 4rem);
+        letter-spacing: 0.2em;
+        text-indent: 0.2em;
+      }
+
+      .screen-copy {
+        font-size: 1rem;
+      }
+
+      .game-button {
+        width: min(100%, 320px);
+      }
+
+      .hud {
+        gap: 16px;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .hud-help {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="gameStage" aria-hidden="true">
+    <div id="textLayer" class="game-layer"></div>
+    <div id="powerUpLayer" class="game-layer"></div>
+    <div id="enemyLayer" class="game-layer"></div>
+    <div id="bulletLayer" class="game-layer"></div>
+    <div id="particleLayer" class="game-layer"></div>
+    <div id="tankLayer" class="game-layer"></div>
+  </div>
+
+  <div id="uiContainer" class="ui-layer screen screen-start">
+    <h1 class="screen-title neon-text">排版防线</h1>
+    <p class="screen-copy">
+      核心排版引擎已失控。<br>
+      使用鼠标操控坦克，左键发射<span class="screen-copy-accent-cyan">文字弹</span>。<br>
+      文字墙体可阻挡子弹，碰撞文字会产生<span class="screen-copy-accent-indigo">避让效果</span>。<br>
+      消灭不断涌来的错误节点，生存下去！
+    </p>
+    <button id="startBtn" class="interactive game-button game-button-cyan">
+      初始化引擎 (开始游戏)
+    </button>
+  </div>
+
+  <div id="hud" class="hud is-transparent">
+    <div>
+      <div class="hud-score neon-text">
+        Score: <span id="scoreDisplay">0</span>
+      </div>
+      <div id="buffDisplay" class="hud-buff"></div>
+    </div>
+    <div class="hud-help">
+      <p>鼠标: 移动与瞄准</p>
+      <p>左键: 射击并破坏文字</p>
+    </div>
+  </div>
+
+  <div id="gameOverUI" class="ui-layer screen screen-gameover is-transparent is-hidden">
+    <h2 class="screen-title neon-text-red">系统崩溃</h2>
+    <p class="screen-subtitle screen-subtitle-danger">排版节点已被感染</p>
+    <p class="screen-score">最终得分: <span id="finalScore" class="screen-score-value">0</span></p>
+    <button id="restartBtn" class="interactive game-button game-button-danger">
+      重启引擎 (再来一次)
+    </button>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

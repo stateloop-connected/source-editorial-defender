@@ -1,0 +1,13 @@
+{
+  // Master toggle to enable Oxc features
+  "oxc.enable": true,
+  // Run linting on save
+  "oxc.lint.run": "onSave", 
+  "editor.codeActionsOnSave": {
+    "source.fixAll.oxc": "always", // Run lint fixes after formatter
+    "source.format.oxc": "always" // Run formatter first
+  },
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  // Required for type-aware linting to function correctly
+  "oxc.typeAware": true
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript"],
+  "ignorePatterns": [
+    "AGENTS.md",
+    "README.md",
+    ".vscode/**",
+    "public/**",
+    "dist/**",
+    "node_modules/**",
+  ]
+}
