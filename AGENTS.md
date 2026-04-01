@@ -4,7 +4,7 @@ This document helps AI agents and developers quickly understand the current arch
 
 ## 1. 项目概述 (Project Overview)
 
-概念: 一款以新时代 Agent 编程势力对抗守旧古法编程势力为主题的生存射击游戏。背景文字会围绕玩家产生“避让”效果，玩家驾驶代理核心在随机文字岛链和曲折主通道构成的动态障碍场中生存并反击敌军。
+概念: 一款以新时代 Agent 编程势力对抗守旧古法编程势力为主题的生存射击游戏。背景文字会围绕玩家产生“避让”效果，玩家驾驶代理核心在 Perlin 噪音生成的文字地形与自然通道中生存并反击敌军。
 
 当前技术栈:
 - Vite
@@ -12,6 +12,7 @@ This document helps AI agents and developers quickly understand the current arch
 - DOM/Canvas 混合分层渲染（`ambientLayer` 为 canvas，其余主层为 DOM）
 - `oxlint` + `oxlint-tsgolint`（用于 CLI 与 VS Code 的 type-aware linting）
 - `@chenglou/pretext` 用于高性能关键词排版测量
+- `noisejs` 用于 Perlin 噪音地形生成
 - `stats.js` 用于开发期 FPS / 帧耗时监视
 - 原生 CSS
 
@@ -20,7 +21,7 @@ This document helps AI agents and developers quickly understand the current arch
 - [src/game/index.ts](src/game/index.ts): 游戏编排层，负责主循环、事件绑定、状态推进与生命周期控制
 - [src/game/state.ts](src/game/state.ts): 全局运行时状态容器
 - [src/game/entities.ts](src/game/entities.ts): `TextBlock` / `Bullet` / `Enemy` / `PowerUp` / `Particle` / `AmbientGlyph`
-- [src/game/layout.ts](src/game/layout.ts): `pretext` 关键词布局、主通道与文字岛生成、文字空间分桶重建
+- [src/game/layout.ts](src/game/layout.ts): Perlin 噪音文字地形生成、`pretext` 行级槽位布局、文字空间分桶重建
 - [src/game/rendering.ts](src/game/rendering.ts): `ambientLayer` canvas 绘制 + 动态实体 DOM 对象池渲染同步
 - [src/game/dom.ts](src/game/dom.ts): 舞台 DOM 引用收集、UI 显隐与 `stats.js` 面板初始化
 - [src/game/constants.ts](src/game/constants.ts): 常量、语料和道具定义
@@ -43,7 +44,7 @@ This document helps AI agents and developers quickly understand the current arch
 当前模块分工：
 - `src/main.ts` 只做 bootstrap
 - `src/game/index.ts` 持有运行时编排权，负责调用 `resizeStage()`、`startGame()`、`update()`、`renderLoop()`
-- `src/game/layout.ts` 专注静态文字地形和空间分桶
+- `src/game/layout.ts` 专注 Perlin 噪音地形、自然通道雕刻与空间分桶
 - `src/game/rendering.ts` 专注把状态同步到 `ambientLayer` canvas 与各 DOM layer，并维护动态实体对象池
 - `src/game/entities.ts` 专注实体数据结构与局部更新逻辑
 
@@ -73,7 +74,7 @@ This document helps AI agents and developers quickly understand the current arch
 渲染特点:
 - 漂浮字粒在 `ambientLayer` 的 canvas 上批量绘制（纯视觉层，不参与碰撞）。
 - 背景文字墙与动态实体使用绝对定位 DOM 元素。
-- 留白区漂浮字粒是纯视觉层，不参与碰撞，也不写入 `textBuckets`；它们应避开主通道，保持路径可读性。
+- 留白区漂浮字粒是纯视觉层，不参与碰撞，也不写入 `textBuckets`；它们应避开主通道/支路与中央安全区，保持路径可读性。
 - `TextBlock` 已加入“脏更新”渲染保护，只在位置、颜色、透明度变化时才写样式。
 - 动态实体仍使用对象池复用 DOM 节点，避免频繁创建销毁。
 
@@ -84,6 +85,7 @@ This document helps AI agents and developers quickly understand the current arch
 - `gameState`: `'start' | 'playing' | 'paused' | 'gameover'`
 - `frameCount`: 全局帧计数器
 - `score`: 当前得分
+- `terrainSeed`: 当前局地形种子（开局重掷，窗口变化复用）
 - `buffs`: `{ freeze, rapid, invincible, barrage }`，存的是 buff 失效帧
 - `mouse`: 鼠标/触摸输入状态
 - `textGrid`, `ambientGlyphs`, `bullets`, `enemies`, `particles`, `powerUps`: 各类实体数组
@@ -91,29 +93,28 @@ This document helps AI agents and developers quickly understand the current arch
 性能相关缓存与运行时辅助结构：
 
 - `lastBuffDisplayText`: buff UI 文案缓存，避免无意义 DOM 更新
-- `glyphWidthCache`: 位于 `src/game/layout.ts`，缓存单个字形宽度，避免重复 `measureText`
 - `textBuckets`: 在编排层重建并传给子弹更新，用于加速“子弹撞文字”检测
 
 ## 5. 文本布局系统 (Text Layout with Pretext)
 
-文字背景布局由 `pretext` 驱动，但以“关键词 token”为基本排版单位：
+文字背景布局由 `pretext + Perlin 噪音` 驱动，但以“关键词 token”为基本排版单位：
 
 - 使用 `prepareWithSegments()` 预处理单个关键词
-- 每个关键词先用 `pretext` 计算宽度，再按整词装入文字岛
+- 每个关键词先用 `pretext` 计算宽度，并通过 `layoutNextLine()` 评估当前槽位可放入性
 - 一个关键词内部仍会拆成多个 `TextBlock`，以保留坦克斥力和子弹击碎的局部交互
-- 先生成曲折主通道与中央战斗室，再在非通道区域放置随机簇状文字岛矩形
-- 文字岛的尺寸、内边距、密度与保底补位会按分辨率自适应调整，避免低分辨率下岛链几乎消失
+- 先基于 Perlin 噪音生成连续文字地形，再雕刻“主通道 + 支路 + 中央安全区”留白
+- 每条文本行会按通道占位切成多个可排版槽位，关键词按整词优先落位
 
 这套机制的意义：
 
-- 适合做“随机岛链 + 主通道”的排版地形
+- 适合做“连续噪音地形 + 自然通道”的排版地形
 - 可以在窗口变化时重建文字墙
 - 保证关键词不会被拆成半词换行
 - 可对文字总量设置预算，避免高分辨率下 DOM 节点数线性失控
 - 避免依赖 DOM reflow 做文本测量
 
 Agent 注意:
-- 如果修改字体、字距、语料密度、岛链尺寸、主通道宽度或安全区尺寸，请同步检查 `buildStageLayout()`
+- 如果修改字体、字距、语料密度、噪音阈值、通道宽度或安全区尺寸，请同步检查 `buildStageLayout()`
 - 如果新增排版模式，优先延续 `prepareWithSegments()` 这条路径，并保持关键词整词布局
 - 尽量复用 prepared/cached 数据，不要在高频路径里重新准备文本
 - 如果调整文字碰撞或空间索引，优先改 `rebuildTextBuckets()` 与相关布局模块，而不是把桶逻辑散回入口文件

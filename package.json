@@ -2,14 +2,15 @@
   "name": "editorial-defender",
   "version": "1.0.0",
   "private": true,
-  "description": "A survival shooter where an agent-native coding faction fights a legacy programming regime across living keyword islands.",
+  "description": "A survival shooter where an agent-native coding faction fights a legacy programming regime across Perlin-noise keyword terrain.",
   "keywords": [
     "agent",
     "agentic-coding",
     "bullet-hell",
     "dom-rendering",
     "game",
-    "keyword-islands",
+    "keyword-terrain",
+    "perlin-noise",
     "pretext",
     "survival-shooter",
     "tank-game",
@@ -29,6 +30,8 @@
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.3",
+    "@types/noisejs": "^2.1.0",
+    "noisejs": "^2.1.0",
     "stats.js": "^0.17.0"
   },
   "devDependencies": {

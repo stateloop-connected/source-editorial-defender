@@ -11,6 +11,7 @@ import type { Buffs, GameState, MouseState, TankState } from "./types";
 export type GameStore = {
   cw: number;
   ch: number;
+  terrainSeed: number;
   gameState: GameState;
   score: number;
   frameCount: number;
@@ -32,6 +33,7 @@ export type GameStore = {
 export const state: GameStore = {
   cw: 0,
   ch: 0,
+  terrainSeed: Math.floor(Math.random() * 65_536),
   gameState: "start",
   score: 0,
   frameCount: 0,

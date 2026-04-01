@@ -34,7 +34,9 @@ function resizeStage(): void {
   dom.stage.style.width = `${state.cw}px`;
   dom.stage.style.height = `${state.ch}px`;
 
-  const layout = buildStageLayout(state.cw, state.ch, dom.textLayer);
+  const layout = buildStageLayout(state.cw, state.ch, dom.textLayer, {
+    seed: state.terrainSeed,
+  });
   state.textGrid = layout.textBlocks;
   state.ambientGlyphs = layout.ambientGlyphs;
   rebuildTextBuckets(state.textGrid, textBuckets);
@@ -155,6 +157,7 @@ function updateBuffDisplay(): void {
 
 function startGame(): void {
   clearGameOverTimers();
+  state.terrainSeed = Math.floor(Math.random() * 65_536);
   resizeStage();
 
   state.tank.x = state.cw / 2;
