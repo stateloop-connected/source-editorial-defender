@@ -148,7 +148,9 @@ function buildUnitsFromPrepared(
 }
 
 function sameCursor(a: LayoutCursor, b: LayoutCursor): boolean {
-  return a.segmentIndex === b.segmentIndex && a.graphemeIndex === b.graphemeIndex;
+  return (
+    a.segmentIndex === b.segmentIndex && a.graphemeIndex === b.graphemeIndex
+  );
 }
 
 const preparedSpace = prepareWithSegments(" ", TEXT_FONT);
@@ -164,7 +166,11 @@ function buildCorpusToken(text: string): CorpusToken {
     (sum, graphemeWidth) => sum + graphemeWidth,
     0,
   );
-  const fullLine = layoutNextLine(prepared, LINE_START_CURSOR, LAYOUT_FIT_MAX_WIDTH);
+  const fullLine = layoutNextLine(
+    prepared,
+    LINE_START_CURSOR,
+    LAYOUT_FIT_MAX_WIDTH,
+  );
   const fullEnd = fullLine?.end ?? {
     segmentIndex: prepared.segments.length,
     graphemeIndex: 0,
@@ -184,11 +190,19 @@ function getSafeZoneScale(): number {
 }
 
 function getLineHeight(): number {
-  return clamp(TEXT_LINE_HEIGHT * (0.9 + getViewportFitScale() * 0.1), 26, TEXT_LINE_HEIGHT);
+  return clamp(
+    TEXT_LINE_HEIGHT * (0.9 + getViewportFitScale() * 0.1),
+    26,
+    TEXT_LINE_HEIGHT,
+  );
 }
 
 function getWordGap(): number {
-  return clamp(corpusWordGap * (0.88 + getViewportFitScale() * 0.12), 10, corpusWordGap);
+  return clamp(
+    corpusWordGap * (0.88 + getViewportFitScale() * 0.12),
+    10,
+    corpusWordGap,
+  );
 }
 
 function createTextElement(char: string): HTMLSpanElement {
@@ -208,7 +222,11 @@ function appendToken(
 ): number {
   let currentX = startX;
 
-  for (let graphemeIndex = 0; graphemeIndex < token.graphemes.length; graphemeIndex++) {
+  for (
+    let graphemeIndex = 0;
+    graphemeIndex < token.graphemes.length;
+    graphemeIndex++
+  ) {
     const grapheme = token.graphemes[graphemeIndex];
     const graphemeWidth = token.graphemeWidths[graphemeIndex];
     if (grapheme === undefined || graphemeWidth === undefined) continue;
@@ -226,7 +244,12 @@ function terrainIndex(mask: TerrainMask, col: number, row: number): number {
   return row * mask.cols + col;
 }
 
-function isPointInsideRect(x: number, y: number, rect: SafeRect, padding = 0): boolean {
+function isPointInsideRect(
+  x: number,
+  y: number,
+  rect: SafeRect,
+  padding = 0,
+): boolean {
   return (
     x >= rect.x - padding &&
     x <= rect.x + rect.w + padding &&
@@ -310,7 +333,14 @@ function buildNoiseTerrainMask(seed: number, safeRect: SafeRect): TerrainMask {
   const passable = new Uint8Array(cols * rows);
   const channel = new Uint8Array(cols * rows);
   const mainCenters = new Float32Array(rows);
-  const mask: TerrainMask = { cellSize, cols, rows, passable, channel, mainCenters };
+  const mask: TerrainMask = {
+    cellSize,
+    cols,
+    rows,
+    passable,
+    channel,
+    mainCenters,
+  };
   const noise = new noiseCtor(seed / 65_536);
   const seedX = seed * 0.000031;
   const seedY = seed * 0.000047;
@@ -321,7 +351,7 @@ function buildNoiseTerrainMask(seed: number, safeRect: SafeRect): TerrainMask {
       const y = row * TERRAIN_BASE_FREQUENCY + seedY;
       const fbm = sampleFbmPerlin(noise, x, y);
       const macro = noise.perlin2(x * 0.37 + 21.7, y * 0.37 + 11.3);
-      const textStrength = ((fbm + 1) * 0.5) * 0.78 + ((macro + 1) * 0.5) * 0.22;
+      const textStrength = (fbm + 1) * 0.5 * 0.78 + (macro + 1) * 0.5 * 0.22;
       const index = terrainIndex(mask, col, row);
       passable[index] = textStrength > TERRAIN_TEXT_THRESHOLD ? 0 : 1;
     }
@@ -343,7 +373,10 @@ function buildNoiseTerrainMask(seed: number, safeRect: SafeRect): TerrainMask {
     );
     mainCenters[row] = centerX;
 
-    const widthNoise = noise.perlin2(69.7 + seedX, yProgress * 4.6 + seedY * 1.8);
+    const widthNoise = noise.perlin2(
+      69.7 + seedX,
+      yProgress * 4.6 + seedY * 1.8,
+    );
     const width = clamp(
       mainBaseWidth + widthNoise * clamp(44 * viewportScale, 24, 72),
       clamp(114 * viewportScale, 92, 150),
@@ -361,7 +394,8 @@ function buildNoiseTerrainMask(seed: number, safeRect: SafeRect): TerrainMask {
     const spanRatio = 0.24 + hashNoise(seed, 431 + branchIndex * 17) * 0.24;
     const startRow = Math.floor(startRatio * (rows - 1));
     const endRow = Math.min(rows - 1, startRow + Math.floor(spanRatio * rows));
-    const lateralReach = clamp(currentWidth * 0.2, 130, 260) *
+    const lateralReach =
+      clamp(currentWidth * 0.2, 130, 260) *
       (0.84 + hashNoise(seed, 443 + branchIndex * 17) * 0.34);
 
     for (let row = startRow; row <= endRow; row++) {
@@ -377,8 +411,10 @@ function buildNoiseTerrainMask(seed: number, safeRect: SafeRect): TerrainMask {
         currentWidth - TEXT_HORIZONTAL_PADDING - corridorPadding * 0.4,
       );
       const widthNoise =
-        noise.perlin2(141 + branchIndex * 11 + seedX, row * 0.16 + seedY * 1.7) *
-        clamp(22 * viewportScale, 12, 34);
+        noise.perlin2(
+          141 + branchIndex * 11 + seedX,
+          row * 0.16 + seedY * 1.7,
+        ) * clamp(22 * viewportScale, 12, 34);
       const branchWidth = clamp(mainBaseWidth * 0.72 + widthNoise, 82, 210);
       carveCorridorBand(mask, row, branchCenterX, branchWidth, 0);
     }
@@ -405,7 +441,11 @@ function buildTextSlotsForBand(
   lineTop: number,
   lineHeight: number,
 ): TerrainTextSlot[] {
-  const rowStart = clamp(Math.floor(lineTop / terrain.cellSize), 0, terrain.rows - 1);
+  const rowStart = clamp(
+    Math.floor(lineTop / terrain.cellSize),
+    0,
+    terrain.rows - 1,
+  );
   const rowEnd = clamp(
     Math.floor((lineTop + lineHeight - 1) / terrain.cellSize),
     0,
@@ -419,7 +459,8 @@ function buildTextSlotsForBand(
     const isTextCell = (() => {
       if (col >= terrain.cols) return false;
       for (let row = rowStart; row <= rowEnd; row++) {
-        if (terrain.passable[terrainIndex(terrain, col, row)] === 0) return true;
+        if (terrain.passable[terrainIndex(terrain, col, row)] === 0)
+          return true;
       }
       return false;
     })();
@@ -453,7 +494,11 @@ function buildTextSlotsForBand(
 
 function tokenFitsWidth(token: CorpusToken, availableWidth: number): boolean {
   if (token.width > availableWidth) return false;
-  const line = layoutNextLine(token.prepared, LINE_START_CURSOR, availableWidth);
+  const line = layoutNextLine(
+    token.prepared,
+    LINE_START_CURSOR,
+    availableWidth,
+  );
   if (line === null) return false;
   return sameCursor(line.end, token.fullEnd);
 }

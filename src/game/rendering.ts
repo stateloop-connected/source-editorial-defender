@@ -63,7 +63,9 @@ export function createRenderer(dom: StageDomRefs): {
   const ambientCanvas = dom.ambientLayer;
   const ambientContextMaybe = ambientCanvas.getContext("2d");
   if (ambientContextMaybe === null) {
-    throw new Error("Expected #ambientLayer to support CanvasRenderingContext2D.");
+    throw new Error(
+      "Expected #ambientLayer to support CanvasRenderingContext2D.",
+    );
   }
   const ambientContext = ambientContextMaybe;
   let ambientCanvasCssWidth = 0;
@@ -74,7 +76,10 @@ export function createRenderer(dom: StageDomRefs): {
   const particlePool: Array<DomPoolItem<HTMLDivElement>> = [];
   const powerUpPool: Array<DomPoolItem<HTMLDivElement>> = [];
 
-  function syncAmbientCanvasSize(stageWidth: number, stageHeight: number): void {
+  function syncAmbientCanvasSize(
+    stageWidth: number,
+    stageHeight: number,
+  ): void {
     const nextCssWidth = Math.max(1, Math.round(stageWidth));
     const nextCssHeight = Math.max(1, Math.round(stageHeight));
     const nextScale = Math.max(1, window.devicePixelRatio || 1);
@@ -102,7 +107,14 @@ export function createRenderer(dom: StageDomRefs): {
     syncAmbientCanvasSize(state.cw, state.ch);
     ambientContext.setTransform(1, 0, 0, 1, 0, 0);
     ambientContext.clearRect(0, 0, ambientCanvas.width, ambientCanvas.height);
-    ambientContext.setTransform(ambientCanvasScale, 0, 0, ambientCanvasScale, 0, 0);
+    ambientContext.setTransform(
+      ambientCanvasScale,
+      0,
+      0,
+      ambientCanvasScale,
+      0,
+      0,
+    );
     ambientContext.textAlign = "center";
     ambientContext.textBaseline = "middle";
     ambientContext.fillStyle = "rgb(148, 163, 184)";
@@ -113,7 +125,10 @@ export function createRenderer(dom: StageDomRefs): {
       const glyph = state.ambientGlyphs[i];
       if (glyph === undefined) continue;
       ambientContext.save();
-      ambientContext.translate(roundRenderValue(glyph.x), roundRenderValue(glyph.y));
+      ambientContext.translate(
+        roundRenderValue(glyph.x),
+        roundRenderValue(glyph.y),
+      );
       ambientContext.rotate((glyph.rotation * Math.PI) / 180);
       ambientContext.globalAlpha = Math.max(0, Math.min(1, glyph.alpha));
       ambientContext.font = `${AMBIENT_FONT_WEIGHT} ${roundRenderValue(glyph.size)}px ${AMBIENT_FONT_FAMILY}`;
