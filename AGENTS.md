@@ -1,209 +1,100 @@
-# Agent 编程防线 (Editorial Defender) - Agent Guide
+# AGENTS.md
 
-This document helps AI agents and developers quickly understand the current architecture, runtime model, and extension constraints of the "Editorial Defender" project.
+本文件是后续 Agent 的「快速地图」，不是百科全书。
+目标：让 Agent 在最短上下文内，做出正确、可验证、可维护的改动。
 
-## 1. 项目概述 (Project Overview)
+## 1) 工作原则（高优先级）
 
-概念: 一款以新时代 Agent 编程势力对抗守旧古法编程势力为主题的生存射击游戏。背景文字会围绕玩家产生“避让”效果，玩家驾驶代理核心在 Perlin 噪音生成的文字地形与自然通道中生存并反击敌军。
+### 1.1 先思考再动手
+- 明确任务边界与假设；有歧义先提问，不要静默选择。
+- 优先给出最小可行改动，不做未被请求的“顺手重构”。
+- 每次改动前定义验收标准（如何确认完成）。
 
-当前技术栈:
-- Vite
-- TypeScript
-- DOM/Canvas 混合分层渲染（`ambientLayer` 为 canvas，其余主层为 DOM）
-- `oxlint` + `oxlint-tsgolint`（用于 CLI 与 VS Code 的 type-aware linting）
-- `@chenglou/pretext` 用于高性能关键词排版测量
-- `noisejs` 用于 Perlin 噪音地形生成
-- `stats.js` 用于开发期 FPS / 帧耗时监视
-- 原生 CSS
+### 1.2 简单优先
+- 只写解决当前问题所需代码，避免过度抽象与“未来配置”。
+- 遵循现有代码风格与模块边界，避免横向扩散修改。
+- 若 200 行可缩到 50 行且不损害可读性，应主动简化。
 
-当前文件结构:
-- [src/main.ts](src/main.ts): 应用入口，仅负责启动游戏
-- [src/game/index.ts](src/game/index.ts): 游戏编排层，负责主循环、事件绑定、状态推进与生命周期控制
-- [src/game/state.ts](src/game/state.ts): 全局运行时状态容器
-- [src/game/entities.ts](src/game/entities.ts): `TextBlock` / `Bullet` / `Enemy` / `PowerUp` / `Particle` / `AmbientGlyph`
-- [src/game/layout.ts](src/game/layout.ts): Perlin 噪音文字地形生成、`pretext` 行级槽位布局、文字空间分桶重建
-- [src/game/rendering.ts](src/game/rendering.ts): `ambientLayer` canvas 绘制 + 动态实体 DOM 对象池渲染同步
-- [src/game/dom.ts](src/game/dom.ts): 舞台 DOM 引用收集、UI 显隐与 `stats.js` 面板初始化
-- [src/game/constants.ts](src/game/constants.ts): 常量、语料和道具定义
-- [src/game/types.ts](src/game/types.ts): 共享类型
-- [src/game/utils.ts](src/game/utils.ts): 通用数学与碰撞工具
-- [index.html](index.html): 舞台 DOM 结构和样式
-- [package.json](package.json): 构建脚本与依赖
+### 1.3 手术式改动
+- 每一处变更都应能直接追溯到需求。
+- 不清理无关历史代码；仅清理由本次改动引入的冗余。
+- 发现仓库中无关问题可备注，但不要顺手改动。
 
-注意: 项目已经不是旧版的“单文件 + Canvas 2D”架构，当前实现是以 DOM 为主、局部 canvas（`ambientLayer`）为辅的分层渲染手段。
+### 1.4 闭环验证
+- 能跑检查就跑：至少 `pnpm check`，必要时 `pnpm lint` / `pnpm build`。
+- Bug 修复优先可复现、可验证；功能改动优先提供最小验证步骤。
+- 提交说明包含：改了什么、为何这样改、如何验证。
 
-## 2. 核心架构与主循环 (Architecture & Game Loop)
+## 2) 项目速览（Editorial Defender）
 
-游戏采用逻辑更新与渲染分离的双循环机制：
+- 类型：生存射击游戏（Agent 阵营 vs 古法编程阵营）。
+- 核心表现：Perlin 噪音生成文字地形 + 主通道/支路 + 中央安全区。
+- 渲染结构：DOM/Canvas 混合分层，`ambientLayer` 是 canvas，其余主实体是 DOM。
+- 技术栈：`TypeScript` + `Vite` + `@chenglou/pretext` + `noisejs` + `stats.js` + 原生 CSS。
+- 入口：`src/main.ts` -> `bootstrapGame()`。
 
-- `update()`: 由 `setInterval(update, 1000 / 60)` 驱动，固定 60 FPS，负责移动、碰撞、刷怪、buff、生命周期处理等逻辑。
-- `renderLoop()`: 由 `requestAnimationFrame(renderLoop)` 驱动，负责把当前状态同步到 canvas 与 DOM。
-- `stats.js` 包裹在 `renderLoop()` 外围，用于观测真实渲染帧率与每帧耗时。
-- `Esc` 可在 `playing` 与 `paused` 状态间切换；暂停时保留当前画面并冻结逻辑推进。
+## 3) 关键架构与职责
 
-当前模块分工：
-- `src/main.ts` 只做 bootstrap
-- `src/game/index.ts` 持有运行时编排权，负责调用 `resizeStage()`、`startGame()`、`update()`、`renderLoop()`
-- `src/game/layout.ts` 专注 Perlin 噪音地形、自然通道雕刻与空间分桶
-- `src/game/rendering.ts` 专注把状态同步到 `ambientLayer` canvas 与各 DOM layer，并维护动态实体对象池
-- `src/game/entities.ts` 专注实体数据结构与局部更新逻辑
+- `src/game/index.ts`：编排层（生命周期、输入、主循环、碰撞、刷怪、UI 更新）。
+- `src/game/state.ts`：全局运行态容器（唯一状态真源）。
+- `src/game/layout.ts`：文字地形生成、通道雕刻、关键词排版、`textBuckets` 重建。
+- `src/game/entities.ts`：实体模型与局部更新（`TextBlock/Bullet/Enemy/...`）。
+- `src/game/rendering.ts`：渲染同步（canvas 绘制 + DOM 对象池）。
+- `src/game/dom.ts`：舞台节点收集与 UI 显隐工具。
+- `src/game/constants.ts`：语料、阈值、视觉与玩法常量。
+- `src/game/utils.ts`：数学工具与碰撞判断（`circlesOverlap`）。
 
-核心时间轴:
-- `frameCount` 是全局唯一时间基准。
-- 所有持续时间、冷却、刷新节奏都依赖 `frameCount`，不要改成 `Date.now()` 或游戏内 `setTimeout()`。
+## 4) 不可破坏的不变量
 
-坐标系:
-- 原点 `(0, 0)` 在左上角
-- 右为 X 正方向
-- 下为 Y 正方向
+### 4.1 时间基准
+- 统一使用 `frameCount` 作为持续时间/冷却/刷新节奏依据。
+- 不要用 `Date.now()` 或游戏内 `setTimeout()` 替代帧时序逻辑。
 
-## 3. 当前渲染模型 (Rendering Model)
+### 4.2 双循环模型
+- 逻辑：`setInterval(update, 1000/60)`。
+- 渲染：`requestAnimationFrame(renderLoop)`。
+- 暂停态冻结逻辑推进但保留渲染画面。
 
-当前舞台由多个渲染 Layer 组成（1 个 canvas + 多个 DOM layer）：
+### 4.3 布局与排版
+- 关键词按整词优先布局，核心依赖 `prepareWithSegments()` + `layoutNextLine()`。
+- 地形流程：噪音文字场 -> 主通道/支路雕刻 -> 中央安全区 -> 行槽填充。
+- `ambientGlyphs` 仅视觉表现，不参与碰撞，不进入 `textBuckets`。
 
-- `ambientLayer`: 留白区漂浮字粒
-- `textLayer`: 背景文字墙
-- `powerUpLayer`: 道具
-- `enemyLayer`: 敌人
-- `bulletLayer`: 子弹
-- `particleLayer`: 粒子
-- `tankLayer`: 玩家坦克
-- `uiContainer` / `hud` / `pauseUI` / `gameOverUI`: UI 层
-- `stats.js` 调试面板: 固定在右下角，独立于 HUD
+### 4.4 状态重置完整性
+- 新增全局状态字段后，必须在 `startGame()` 中重置。
+- 新增布局缓存后，必须考虑 `resizeStage()` 的重建行为。
 
-渲染特点:
-- 漂浮字粒在 `ambientLayer` 的 canvas 上批量绘制（纯视觉层，不参与碰撞）。
-- 背景文字墙与动态实体使用绝对定位 DOM 元素。
-- 留白区漂浮字粒是纯视觉层，不参与碰撞，也不写入 `textBuckets`；它们应避开主通道/支路与中央安全区，保持路径可读性。
-- `TextBlock` 已加入“脏更新”渲染保护，只在位置、颜色、透明度变化时才写样式。
-- 动态实体仍使用对象池复用 DOM 节点，避免频繁创建销毁。
+## 5) 性能约束（默认遵守）
 
-## 4. 全局状态管理 (Global State Management)
+- 高频路径避免无意义分配和全量扫描（特别是 `update()` 与 `render()`）。
+- 保留并复用现有对象池策略（子弹/敌人/粒子/道具 DOM 节点）。
+- 渲染写样式尽量走脏更新（参照 `TextBlock` 的 `lastRender*` 缓存策略）。
+- 碰撞优先平方距离比较；涉及文字碰撞优先复用 `textBuckets`。
 
-关键全局状态现集中在 `src/game/state.ts`：
+## 6) 常见任务落点
 
-- `gameState`: `'start' | 'playing' | 'paused' | 'gameover'`
-- `frameCount`: 全局帧计数器
-- `score`: 当前得分
-- `terrainSeed`: 当前局地形种子（开局重掷，窗口变化复用）
-- `buffs`: `{ freeze, rapid, invincible, barrage }`，存的是 buff 失效帧
-- `mouse`: 鼠标/触摸输入状态
-- `textGrid`, `ambientGlyphs`, `bullets`, `enemies`, `particles`, `powerUps`: 各类实体数组
+- 调整地形/语料/通道：优先看 `src/game/layout.ts` + `src/game/constants.ts`。
+- 调整实体行为：优先看 `src/game/entities.ts` 与 `src/game/index.ts`。
+- 调整分层渲染/对象池：优先看 `src/game/rendering.ts`。
+- 调整 UI 结构和样式：看 `index.html` + `src/game/dom.ts`。
+- 调整全局状态：看 `src/game/state.ts` 并同步重置逻辑。
 
-性能相关缓存与运行时辅助结构：
+## 7) 变更流程（Agent 执行模板）
 
-- `lastBuffDisplayText`: buff UI 文案缓存，避免无意义 DOM 更新
-- `textBuckets`: 在编排层重建并传给子弹更新，用于加速“子弹撞文字”检测
+1. 明确需求与假设，给出最小实现方案。
+2. 只改必要文件，保持模块边界清晰。
+3. 本地验证（至少一条）：
+   - `pnpm check`
+   - `pnpm lint`
+   - `pnpm build`
+4. 输出结果时说明：
+   - 修改文件与关键点
+   - 验证命令与结果
+   - 风险与后续建议（如有）
 
-## 5. 文本布局系统 (Text Layout with Pretext)
+## 8) 文档策略（仓库即记录系统）
 
-文字背景布局由 `pretext + Perlin 噪音` 驱动，但以“关键词 token”为基本排版单位：
-
-- 使用 `prepareWithSegments()` 预处理单个关键词
-- 每个关键词先用 `pretext` 计算宽度，并通过 `layoutNextLine()` 评估当前槽位可放入性
-- 一个关键词内部仍会拆成多个 `TextBlock`，以保留坦克斥力和子弹击碎的局部交互
-- 先基于 Perlin 噪音生成连续文字地形，再雕刻“主通道 + 支路 + 中央安全区”留白
-- 每条文本行会按通道占位切成多个可排版槽位，关键词按整词优先落位
-
-这套机制的意义：
-
-- 适合做“连续噪音地形 + 自然通道”的排版地形
-- 可以在窗口变化时重建文字墙
-- 保证关键词不会被拆成半词换行
-- 可对文字总量设置预算，避免高分辨率下 DOM 节点数线性失控
-- 避免依赖 DOM reflow 做文本测量
-
-Agent 注意:
-- 如果修改字体、字距、语料密度、噪音阈值、通道宽度或安全区尺寸，请同步检查 `buildStageLayout()`
-- 如果新增排版模式，优先延续 `prepareWithSegments()` 这条路径，并保持关键词整词布局
-- 尽量复用 prepared/cached 数据，不要在高频路径里重新准备文本
-- 如果调整文字碰撞或空间索引，优先改 `rebuildTextBuckets()` 与相关布局模块，而不是把桶逻辑散回入口文件
-
-## 6. 核心实体 (Core Entities)
-
-### 6.1 Tank
-
-不是 Class，而是全局单例对象。
-
-- 位置通过鼠标/触摸输入做平滑跟随
-- 朝向由鼠标相对位置决定
-- 射击依赖 `lastShot` 与 `fireRate`
-
-### 6.2 TextBlock
-
-背景文字墙的最小单位。
-
-- 有原始位置 `originX/originY`
-- 会受到坦克斥力影响
-- 会通过弹性恢复力回到初始位置
-- 被子弹击中后会进入 `dead` 状态并按帧数延迟重生
-- 带有渲染缓存字段，避免每帧重复写 DOM
-
-### 6.3 Bullet
-
-- `isPlayer` 区分敌我
-- 玩家子弹可破坏文字与敌人
-- 敌人子弹只伤害玩家
-- 当前使用文字空间分桶加速与 `TextBlock` 的碰撞判断
-
-### 6.4 Enemy
-
-- 从屏幕边缘外生成
-- 通过 `Math.atan2` 朝坦克追踪
-- 自带独立开火节奏
-- 受 `freeze` buff 影响
-
-### 6.5 PowerUp
-
-当前内置四种：
-
-- `freeze`: 冻结敌人
-- `rapid`: 提升玩家射速
-- `invincible`: 玩家无敌并可触碰秒杀敌人
-- `barrage`: 玩家每次开火会向 360 度同时发射一圈子弹
-
-## 7. 碰撞与性能策略 (Collision & Performance Notes)
-
-当前碰撞主要基于圆形碰撞：
-
-- 核心判断已优先改成平方距离比较，减少不必要的开方
-- 公共方法为 `circlesOverlap()`
-
-当前已落地的优化：
-
-- 文字布局 prepared 缓存
-- 字形宽度缓存
-- 文字空间分桶
-- `TextBlock` 脏更新渲染
-- buff 文本更新去抖
-
-仍值得继续优化的方向：
-
-- 动态实体层的脏更新
-- 敌人与玩家子弹碰撞的空间分桶
-- 将逻辑更新整合为 `requestAnimationFrame + fixed timestep`
-
-## 8. Agent 扩展与修改指南 (Extension Guidelines for AI)
-
-修改代码时请遵循以下原则：
-
-重置状态必须彻底:
-- 如果新增 `state.ts` 中的全局变量、计时器或坦克字段，必须在 `startGame()` 中正确重置
-- 如果新增与布局相关的缓存，要考虑 `resizeStage()` 时是否需要重建
-
-时间控制必须基于帧:
-- 不要用 `Date.now()`、游戏内 `setTimeout()` 或真实时间差控制冷却/持续时间
-- 应统一使用 `frameCount`
-
-性能优先级:
-- 高开销逻辑优先放在 `update()`，但避免重复扫描大数组
-- `render()` 中避免复杂计算、临时对象分配和无条件样式写入
-- 如果要新增大量实体，优先考虑对象池或空间索引
-
-UI 交互:
-- 像分数、buff 文案、结算面板这种 DOM 文本更新，应放在状态变更点，避免每帧刷新
-- 暂停提示这类覆盖层应复用现有 UI layer，通过状态切换显示/隐藏，不要靠高频轮询改文案
-- 调试型 UI（如 `stats.js`）应尽量复用第三方面板自身更新逻辑，不要再额外套一层高频 DOM 文本刷新
-
-文档同步:
-- 任何涉及架构、渲染模型、技术栈、主循环或性能策略的修改，都应同步更新本文件和 `README.md`
+- 本文件保持短小稳定，充当导航地图。
+- 深入说明写入更具体文档（如 `README.md` 或后续 `docs/`）。
+- 架构、主循环、渲染模型、性能策略变更后，必须同步更新文档。
+- 避免把临时讨论放在外部聊天工具而不落库；Agent 仅能可靠读取仓库内信息。
