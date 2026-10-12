@@ -1,0 +1,14 @@
+{
+  "build_script": "tsc --noEmit && vite build",
+  "gameplay_or_asset_changes": false,
+  "lockfile": "pnpm-lock.yaml",
+  "mode": "native_source_build",
+  "repository": "Steve245270533/editorial-defender",
+  "schema_version": 1,
+  "source_changes": [
+    ".packaging/plan.json"
+  ],
+  "status": "ready",
+  "upstream_code_executed_locally": false,
+  "upstream_sha": "d26eb3377eab6c123146029c7fb170b6ce3e34db"
+}
